@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <title>Configuração de Previsão</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+  <div class="container py-4">
+    <h2 class="mb-4">Configuração de Previsão</h2>
+    
+    <form method="post" action="{% url 'salvar_configuracao' %}">
+      {% csrf_token %}
+      <div class="row mb-3">
+        <div class="col-md-4">
+          <label class="form-label">Empresa</label>
+          <select name="empresa" class="form-select" required>
+            <option value="">Selecione...</option>
+            {% for emp in empresas %}
+              <option value="{{ emp.idempresa }}">{{ emp.empresa }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Centro de Resultado</label>
+          <select name="centro" class="form-select" required>
+            <option value="">Selecione...</option>
+            {% for cr in centros %}
+              <option value="{{ cr.idcentroresultado }}">{{ cr.centroresultados }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Conta Contábil</label>
+          <select name="conta" class="form-select" required>
+            <option value="">Selecione...</option>
+            {% for cta in contas %}
+              <option value="{{ cta.idctacontabil }}">{{ cta.contabil }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <div class="row mb-3">
+        <div class="col-md-3">
+          <label class="form-label">Mês</label>
+          <select name="mes" class="form-select">
+            <option value="">-- opcional --</option>
+            {% for num, nome in meses %}
+              <option value="{{ num }}">{{ nome }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Tipo</label>
+          <select name="tipo" class="form-select" required>
+            <option value="V">Valor Manual</option>
+            <option value="P">Percentual</option>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Valor / Percentual</label>
+          <input type="number" step="0.01" name="valor" class="form-control" required>
+        </div>
+        <div class="col-md-3 d-grid align-items-end">
+          <button type="submit" class="btn btn-primary mt-3">Salvar</button>
+        </div>
+      </div>
+    </form>
+
+    <hr class="my-4">
+
+    <h4>Configurações Existentes</h4>
+    {% if configuracoes %}
+      <table class="table table-striped" id="config-table">
+        <thead class="table-dark">
+          <tr>
+            <th>Empresa</th>
+            <th>Centro Resultado</th>
+            <th>Conta Contábil</th>
+            <th>Mês</th>
+            <th>Tipo</th>
+            <th>Valor</th>
+            <th>Ações</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in configuracoes %}
+          <tr data-id="{{ forloop.counter0 }}">
+            <td class="empresa">{{ item.ideempprevisao }}</td>
+            <td class="centro">{{ item.idcentroresultado }}</td>
+            <td class="conta">{{ item.idctacontabil }}</td>
+            <td class="mes">{{ item.mesprevisao }}</td>
+            <td class="tipo">{{ item.tipoprevisao }}</td>
+            <td class="valor">{{ item.valorprevisao }}</td>
+            <td>
+              <button type="button" class="btn btn-sm btn-outline-primary btn-editar">Editar</button>
+              <button type="button" class="btn btn-sm btn-success btn-salvar d-none">Salvar</button>
+              <button type="button" class="btn btn-sm btn-secondary btn-cancelar d-none">Cancelar</button>
+              <button type="button" class="btn btn-sm btn-outline-danger btn-excluir ms-1">🗑️ Excluir</button>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <script>
+        document.addEventListener('DOMContentLoaded', function() {
+          const table = document.getElementById('config-table');
+          let editando = null;
+
+          table.querySelectorAll('.btn-editar').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+              if (editando) return; // Só uma edição por vez
+              const tr = btn.closest('tr');
+              editando = tr;
+              // Salva valores antigos
+              tr.dataset.old = tr.innerHTML;
+              // Troca células por inputs
+              tr.querySelectorAll('td').forEach(function(td, idx) {
+                if (td.classList.contains('empresa') || td.classList.contains('centro') || td.classList.contains('conta') || td.classList.contains('mes') || td.classList.contains('tipo') || td.classList.contains('valor')) {
+                  const valor = td.textContent.trim().replace(/\s+/g, '');
+                  let input = '';
+                  if (td.classList.contains('tipo')) {
+                    input = `<select class='form-select form-select-sm'>\
+                      <option value='V' ${valor==='V'?'selected':''}>V</option>\
+                      <option value='P' ${valor==='P'?'selected':''}>P</option>\
+                    </select>`;
+                  } else if (td.classList.contains('valor')) {
+                    // Para valor, converte vírgula para ponto se necessário
+                    const valorNumerico = valor.replace(',', '.');
+                    input = `<input type='number' step='0.01' class='form-control form-control-sm' value='${valorNumerico}'>`;
+                  } else {
+                    input = `<input type='text' class='form-control form-control-sm' value='${valor}'>`;
+                  }
+                  td.innerHTML = input;
+                }
+              });
+              // Mostra botões salvar/cancelar
+              tr.querySelector('.btn-editar').classList.add('d-none');
+              tr.querySelector('.btn-salvar').classList.remove('d-none');
+              tr.querySelector('.btn-cancelar').classList.remove('d-none');
+            });
+          });
+
+          table.querySelectorAll('.btn-cancelar').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+              if (!editando) return;
+              // Restaura linha
+              editando.innerHTML = editando.dataset.old;
+              editando = null;
+            });
+          });
+
+          // O botão salvar só faz console.log dos dados por enquanto
+          table.querySelectorAll('.btn-salvar').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+              if (!editando) return;
+              const tr = editando;
+              const empresa = tr.querySelector('.empresa input, .empresa select')?.value;
+              const centro = tr.querySelector('.centro input, .centro select')?.value;
+              const conta = tr.querySelector('.conta input, .conta select')?.value;
+              const mes = tr.querySelector('.mes input, .mes select')?.value;
+              const tipo = tr.querySelector('.tipo input, .tipo select')?.value;
+              const valor = tr.querySelector('.valor input, .valor select')?.value;
+              
+              // Envia dados para o backend
+              const formData = new FormData();
+              formData.append('empresa', empresa);
+              formData.append('centro', centro);
+              formData.append('conta', conta);
+              formData.append('mes', mes);
+              formData.append('tipo', tipo);
+              formData.append('valor', valor);
+              formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+
+              fetch('{% url "atualizar_configuracao" %}', {
+                method: 'POST',
+                body: formData
+              })
+              .then(response => response.json())
+              .then(data => {
+                if (data.success) {
+                  // Atualiza a linha com os novos valores
+                  editando.innerHTML = `<td class="empresa">${empresa}</td><td class="centro">${centro}</td><td class="conta">${conta}</td><td class="mes">${mes}</td><td class="tipo">${tipo}</td><td class="valor">${valor}</td><td><button type='button' class='btn btn-sm btn-outline-primary btn-editar'>Editar</button><button type='button' class='btn btn-sm btn-success btn-salvar d-none'>Salvar</button><button type='button' class='btn btn-sm btn-secondary btn-cancelar d-none'>Cancelar</button></td>`;
+                  editando = null;
+                  // Reaplica eventos
+                  document.querySelectorAll('.btn-editar').forEach(function(btn) {
+                    btn.onclick = function() { location.reload(); };
+                  });
+                  alert('Configuração atualizada com sucesso!');
+                } else {
+                  alert('Erro ao atualizar: ' + data.message);
+                }
+              })
+              .catch(error => {
+                console.error('Erro:', error);
+                alert('Erro ao atualizar configuração');
+              });
+            });
+          });
+
+          // Adiciona funcionalidade de exclusão
+          table.querySelectorAll('.btn-excluir').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+              if (!confirm('Tem certeza que deseja excluir esta configuração?')) {
+                return;
+              }
+              
+              const tr = btn.closest('tr');
+              const empresa = tr.querySelector('.empresa').textContent.trim();
+              const centro = tr.querySelector('.centro').textContent.trim();
+              const conta = tr.querySelector('.conta').textContent.trim();
+              const mes = tr.querySelector('.mes').textContent.trim();
+              
+              console.log('🗑️ Dados para exclusão:', {
+                empresa: empresa,
+                centro: centro,
+                conta: conta,
+                mes: mes
+              });
+              
+              // Envia dados para exclusão
+              const formData = new FormData();
+              formData.append('empresa', empresa);
+              formData.append('centro', centro);
+              formData.append('conta', conta);
+              formData.append('mes', mes);
+              formData.append('acao', 'D'); // D = DELETE
+              formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+
+              fetch('{% url "salvar_configuracao" %}', {
+                method: 'POST',
+                headers: {
+                  'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: formData
+              })
+              .then(response => response.json())
+              .then(data => {
+                if (data.success) {
+                  // Remove a linha da tabela
+                  tr.remove();
+                  alert('Configuração excluída com sucesso!');
+                } else {
+                  alert('Erro ao excluir: ' + data.message);
+                }
+              })
+              .catch(error => {
+                console.error('Erro:', error);
+                alert('Erro ao excluir configuração');
+              });
+            });
+          });
+        });
+      </script>
+    {% else %}
+      <div class="alert alert-info">Nenhuma configuração encontrada.</div>
+    {% endif %}
+
+    <div class="text-center mt-4">
+      <a href="{% url 'painel' %}" class="btn btn-secondary">⬅ Voltar</a>
+    </div>
+  </div>
+</body>
+</html>

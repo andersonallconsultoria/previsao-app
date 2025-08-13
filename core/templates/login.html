@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <title>Login - Sistema de Previsão</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 </head>
 <body class="bg-light">
   <div class="container mt-5">
@@ -11,24 +12,265 @@
       <div class="col-md-5">
         <h3 class="text-center mb-4">Acesso ao Sistema</h3>
         {% if erro %}
-          <div class="alert alert-danger">{{ erro }}</div>
+          <div class="alert {% if erro_tipo == 'connection' %}alert-warning{% else %}alert-danger{% endif %} alert-dismissible fade show" role="alert">
+            <div class="d-flex align-items-center">
+              {% if erro_tipo == 'connection' %}
+                <i class="fas fa-exclamation-triangle me-2"></i>
+              {% else %}
+                <i class="fas fa-times-circle me-2"></i>
+              {% endif %}
+              <div>
+                {{ erro|safe }}
+                {% if erro_tipo == 'connection' %}
+                  <div class="mt-2">
+                    <small class="text-muted">
+                      💡 <strong>Dica:</strong> Clique em "Configurar conexão" para verificar as configurações do servidor.
+                    </small>
+                  </div>
+                {% endif %}
+              </div>
+            </div>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+          </div>
         {% endif %}
         <form method="post">
           {% csrf_token %}
           <div class="mb-3">
-            <label for="username" class="form-label">Usuário</label>
+            <label for="username" class="form-label">
+              <i class="fas fa-user me-2"></i>Usuário
+            </label>
             <input type="text" name="username" class="form-control" required>
           </div>
           <div class="mb-3">
-            <label for="password" class="form-label">Senha</label>
-            <input type="password" name="password" class="form-control" required>
+            <label for="password" class="form-label">
+              <i class="fas fa-lock me-2"></i>Senha
+            </label>
+            <div class="input-group">
+              <input type="password" name="password" class="form-control" id="password" required>
+              <button class="btn btn-outline-secondary" type="button" id="togglePassword">
+                <i class="fas fa-eye-slash"></i>
+              </button>
+            </div>
           </div>
-          <div class="d-grid">
-            <button type="submit" class="btn btn-primary">Entrar</button>
+          <div class="mb-3 form-check">
+            <input type="checkbox" class="form-check-input" id="rememberMe">
+            <label class="form-check-label" for="rememberMe">
+              Lembrar minhas credenciais
+            </label>
+          </div>
+          <div class="d-grid gap-2">
+            <button type="submit" class="btn btn-success btn-lg">Entrar</button>
+            <button type="button" class="btn btn-outline-success" data-bs-toggle="modal" data-bs-target="#configModal">
+              <i class="fas fa-cog me-2"></i>Configurar conexão
+            </button>
           </div>
         </form>
       </div>
     </div>
   </div>
+
+  <!-- Modal de Configuração -->
+  <div class="modal fade" id="configModal" tabindex="-1" aria-labelledby="configModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title text-success" id="configModalLabel">
+            <i class="fas fa-cog me-2"></i>Credenciais de Conexão
+          </h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <form id="configForm">
+            <div class="mb-3">
+              <label for="serverAddress" class="form-label">
+                <span class="border-bottom border-success pb-1">Endereço do Servidor</span>
+              </label>
+              <input type="text" class="form-control" id="serverAddress" placeholder="200.141.41.20" required>
+            </div>
+            <div class="row">
+              <div class="col-6">
+                <div class="mb-3">
+                  <label for="serverPort" class="form-label">
+                    <span class="border-bottom border-success pb-1">Porta</span>
+                  </label>
+                  <input type="number" class="form-control" id="serverPort" placeholder="8086" required>
+                </div>
+              </div>
+              <div class="col-6">
+                <div class="mb-3">
+                  <label class="form-label d-block">
+                    <span class="border-bottom border-success pb-1">Usar SSL</span>
+                  </label>
+                  <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="useSSL">
+                    <label class="form-check-label" for="useSSL">Ativar</label>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-success" id="saveConfig">
+            <i class="fas fa-save me-2"></i>Salvar
+          </button>
+          <button type="button" class="btn btn-info" id="testConnection">
+            <i class="fas fa-plug me-2"></i>Testar Conexão
+          </button>
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+            <i class="fas fa-times me-2"></i>Cancelar
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    // Toggle password visibility
+    document.getElementById('togglePassword').addEventListener('click', function() {
+      const password = document.getElementById('password');
+      const icon = this.querySelector('i');
+      
+      if (password.type === 'password') {
+        password.type = 'text';
+        icon.classList.remove('fa-eye-slash');
+        icon.classList.add('fa-eye');
+      } else {
+        password.type = 'password';
+        icon.classList.remove('fa-eye');
+        icon.classList.add('fa-eye-slash');
+      }
+    });
+
+    // Load current configuration
+    document.addEventListener('DOMContentLoaded', function() {
+      // Parse current API_BASE_URL from environment
+      const currentUrl = '{{ api_base_url|default:"http://200.141.41.20:8086" }}';
+      const urlParts = currentUrl.match(/^(https?):\/\/([^:]+):(\d+)$/);
+      
+      if (urlParts) {
+        document.getElementById('serverAddress').value = urlParts[2];
+        document.getElementById('serverPort').value = urlParts[3];
+        document.getElementById('useSSL').checked = urlParts[1] === 'https';
+      }
+    });
+
+    // Test connection
+    document.getElementById('testConnection').addEventListener('click', function() {
+      const serverAddress = document.getElementById('serverAddress').value;
+      const serverPort = document.getElementById('serverPort').value;
+      const useSSL = document.getElementById('useSSL').checked;
+      
+      if (!serverAddress || !serverPort) {
+        alert('Por favor, preencha todos os campos obrigatórios.');
+        return;
+      }
+
+      const protocol = useSSL ? 'https' : 'http';
+      const apiUrl = `${protocol}://${serverAddress}:${serverPort}`;
+      
+      // Show loading state
+      const btn = this;
+      const originalText = btn.innerHTML;
+      btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Testando...';
+      btn.disabled = true;
+
+      // Test connection using our backend API
+      fetch('{% url "testar_conexao" %}', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        },
+        body: JSON.stringify({
+          api_base_url: apiUrl
+        })
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          btn.innerHTML = '<i class="fas fa-check me-2"></i>Conexão OK!';
+          btn.className = 'btn btn-success';
+          // Show success message
+          alert(`✅ ${data.message}\nStatus: ${data.status_code || 'N/A'}`);
+        } else {
+          btn.innerHTML = '<i class="fas fa-times me-2"></i>Falha na Conexão';
+          btn.className = 'btn btn-danger';
+          // Show error message
+          alert(`❌ ${data.message}`);
+        }
+        setTimeout(() => {
+          btn.innerHTML = originalText;
+          btn.className = 'btn btn-info';
+          btn.disabled = false;
+        }, 2000);
+      })
+      .catch(error => {
+        // Network error
+        btn.innerHTML = '<i class="fas fa-times me-2"></i>Erro de Rede';
+        btn.className = 'btn btn-danger';
+        alert('❌ Erro de rede ao testar conexão');
+        setTimeout(() => {
+          btn.innerHTML = originalText;
+          btn.className = 'btn btn-info';
+          btn.disabled = false;
+        }, 2000);
+      });
+    });
+
+    // Save configuration
+    document.getElementById('saveConfig').addEventListener('click', function() {
+      const serverAddress = document.getElementById('serverAddress').value;
+      const serverPort = document.getElementById('serverPort').value;
+      const useSSL = document.getElementById('useSSL').checked;
+      
+      if (!serverAddress || !serverPort) {
+        alert('Por favor, preencha todos os campos obrigatórios.');
+        return;
+      }
+
+      const protocol = useSSL ? 'https' : 'http';
+      const apiUrl = `${protocol}://${serverAddress}:${serverPort}`;
+
+      // Send configuration to backend
+      fetch('{% url "configurar_conexao" %}', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        },
+        body: JSON.stringify({
+          api_base_url: apiUrl
+        })
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          if (data.reloaded) {
+            alert('Configuração salva com sucesso! A aplicação foi recarregada automaticamente.');
+            // Close modal
+            bootstrap.Modal.getInstance(document.getElementById('configModal')).hide();
+            // Reload page to ensure new configuration is active
+            setTimeout(() => {
+              window.location.reload();
+            }, 1000);
+          } else {
+            alert('Configuração salva com sucesso!');
+            // Close modal
+            bootstrap.Modal.getInstance(document.getElementById('configModal')).hide();
+          }
+        } else {
+          alert('Erro ao salvar configuração: ' + data.message);
+          // Close modal
+          bootstrap.Modal.getInstance(document.getElementById('configModal')).hide();
+        }
+      })
+      .catch(error => {
+        console.error('Erro:', error);
+        alert('Erro ao salvar configuração');
+      });
+    });
+  </script>
 </body>
 </html>

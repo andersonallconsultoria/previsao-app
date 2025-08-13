@@ -7,8 +7,53 @@ from collections import defaultdict
 import logging
 import json
 from datetime import datetime
+import os
 
 logger = logging.getLogger(__name__)
+
+# Cache dinâmico para configurações
+_config_cache = {}
+_config_cache_timestamp = 0
+
+def get_dynamic_config(key, default=None):
+    """
+    Obtém configuração dinamicamente do arquivo .env
+    com cache para performance
+    """
+    global _config_cache, _config_cache_timestamp
+    
+    # Verifica se o arquivo .env foi modificado
+    try:
+        env_path = '.env'
+        if os.path.exists(env_path):
+            current_timestamp = os.path.getmtime(env_path)
+            
+            # Se o arquivo foi modificado, limpa o cache
+            if current_timestamp > _config_cache_timestamp:
+                _config_cache.clear()
+                _config_cache_timestamp = current_timestamp
+                logger.info("🔄 Cache de configurações limpo - arquivo .env modificado")
+        
+        # Se não está no cache, lê do arquivo
+        if key not in _config_cache:
+            if os.path.exists(env_path):
+                with open(env_path, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        line = line.strip()
+                        if line and not line.startswith('#') and '=' in line:
+                            k, v = line.split('=', 1)
+                            _config_cache[k] = v
+                            logger.debug(f"📝 Config carregada: {k}={v}")
+            
+            # Se ainda não encontrou, usa o config padrão
+            if key not in _config_cache:
+                _config_cache[key] = config(key, default=default)
+        
+        return _config_cache.get(key, default)
+        
+    except Exception as e:
+        logger.warning(f"⚠️ Erro ao ler configuração dinâmica: {e}")
+        return config(key, default=default)
 
 # Filtro de template
 from django.template.defaulttags import register
@@ -25,30 +70,78 @@ def log_json_pretty(obj, title=None):
 
 # Token OAuth2
 def gerar_token(username, password):
-    url = f"{config('API_BASE_URL')}/cisspoder-auth/oauth/token"
+    url = f"{get_dynamic_config('API_BASE_URL')}/cisspoder-auth/oauth/token"
     payload = {
         'username': username,
         'password': password,
         'grant_type': 'password',
-        'client_id': config('CLIENT_ID'),
-        'client_secret': config('CLIENT_SECRET'),
+        'client_id': get_dynamic_config('CLIENT_ID'),
+        'client_secret': get_dynamic_config('CLIENT_SECRET'),
     }
     headers = {'Content-Type': 'application/x-www-form-urlencoded'}
-    response = requests.post(url, data=payload, headers=headers)
-    return response.json()
+    
+    try:
+        # Adicionar timeout para evitar esperas muito longas
+        response = requests.post(url, data=payload, headers=headers, timeout=10)
+        return response.json()
+    except requests.exceptions.Timeout:
+        logger.error(f"⏰ Timeout ao conectar com {url}")
+        return {'error': 'timeout', 'error_description': 'Timeout de conexão'}
+    except requests.exceptions.ConnectTimeout:
+        logger.error(f"⏰ Connect timeout ao conectar com {url}")
+        return {'error': 'connect_timeout', 'error_description': 'Timeout de conexão'}
+    except requests.exceptions.ConnectionError:
+        logger.error(f"🔌 Erro de conexão com {url}")
+        return {'error': 'connection_error', 'error_description': 'Erro de conexão'}
+    except Exception as e:
+        logger.error(f"❌ Erro inesperado ao gerar token: {str(e)}")
+        return {'error': 'unknown', 'error_description': f'Erro inesperado: {str(e)}'}
 
 # Login
 def login_view(request):
     if request.method == 'POST':
         username = request.POST['username']
         password = request.POST['password']
-        token_data = gerar_token(username, password)
-        if 'access_token' in token_data:
-            request.session['token'] = token_data['access_token']
-            return redirect('painel')
-        else:
-            return render(request, 'login.html', {'erro': 'Login inválido'})
-    return render(request, 'login.html')
+        
+        try:
+            token_data = gerar_token(username, password)
+            if 'access_token' in token_data:
+                request.session['token'] = token_data['access_token']
+                return redirect('painel')
+            else:
+                # Erro de autenticação da API
+                error_msg = token_data.get('error_description', 'Login inválido')
+                if 'invalid_grant' in error_msg.lower():
+                    error_msg = 'Usuário ou senha incorretos'
+                elif 'timeout' in error_msg.lower() or 'connection' in error_msg.lower():
+                    error_msg = 'Erro de conexão com o servidor. Verifique a configuração de conexão.'
+                
+                return render(request, 'login.html', {
+                    'erro': error_msg,
+                    'erro_tipo': 'auth'
+                })
+        except requests.exceptions.ConnectTimeout:
+            return render(request, 'login.html', {
+                'erro': '❌ Erro de conexão: Timeout ao conectar com o servidor. Verifique se o IP e porta estão corretos.',
+                'erro_tipo': 'connection'
+            })
+        except requests.exceptions.ConnectionError:
+            return render(request, 'login.html', {
+                'erro': '❌ Erro de conexão: Não foi possível conectar com o servidor. Verifique se o servidor está rodando e acessível.',
+                'erro_tipo': 'connection'
+            })
+        except Exception as e:
+            logger.error(f"❌ Erro inesperado no login: {str(e)}")
+            return render(request, 'login.html', {
+                'erro': f'❌ Erro inesperado: {str(e)}',
+                'erro_tipo': 'unknown'
+            })
+    
+    # Pass current API_BASE_URL to template
+    context = {
+        'api_base_url': get_dynamic_config('API_BASE_URL', default='http://200.141.41.20:8086')
+    }
+    return render(request, 'login.html', context)
 
 # Painel principal
 @token_required
@@ -62,7 +155,7 @@ def painel_view(request):
     ano_atual = datetime.now().year
 
     def post_api(endpoint):
-        url = f"{config('API_BASE_URL')}/cisspoder-service/{endpoint}"
+        url = f"{get_dynamic_config('API_BASE_URL')}/cisspoder-service/{endpoint}"
         try:
             resp = requests.post(url, json={"page": 1}, headers=headers)
             if resp.status_code == 200:
@@ -137,7 +230,7 @@ def painel_view(request):
         logger.info(f"   - Agrupar por centro: {agrupar_por_centro}")
         log_json_pretty(payload)
 
-        url = f"{config('API_BASE_URL')}/cisspoder-service/centro_resultado_bi"
+        url = f"{get_dynamic_config('API_BASE_URL')}/cisspoder-service/centro_resultado_bi"
         try:
             # Implementar paginação para buscar todas as páginas
             resultados = []
@@ -351,7 +444,7 @@ def configuracao_view(request):
     }
 
     def post_api(endpoint):
-        url = f"{config('API_BASE_URL')}/cisspoder-service/{endpoint}"
+        url = f"{get_dynamic_config('API_BASE_URL')}/cisspoder-service/{endpoint}"
         try:
             resp = requests.post(url, json={"page": 1}, headers=headers)
             if resp.status_code == 200:
@@ -414,7 +507,7 @@ def salvar_configuracao(request):
             logger.info("🗑️ Excluindo configuração:")
             log_json_pretty(dados)
 
-            url = f"{config('API_BASE_URL')}/cisspoder-service/set_centroresultado_config"
+            url = f"{get_dynamic_config('API_BASE_URL')}/cisspoder-service/set_centroresultado_config"
             response = requests.post(url, json=[dados], headers=headers)
 
             logger.info(f"📥 Status: {response.status_code}")
@@ -443,7 +536,7 @@ def salvar_configuracao(request):
             logger.info("📤 Enviando nova configuração:")
             log_json_pretty(dados)
 
-            url = f"{config('API_BASE_URL')}/cisspoder-service/set_centroresultado_config"
+            url = f"{get_dynamic_config('API_BASE_URL')}/cisspoder-service/set_centroresultado_config"
             response = requests.post(url, json=[dados], headers=headers)
 
             logger.info(f"📥 Status: {response.status_code}")
@@ -473,7 +566,7 @@ def atualizar_configuracao(request):
         logger.info("📤 Atualizando configuração existente:")
         log_json_pretty(dados)
 
-        url = f"{config('API_BASE_URL')}/cisspoder-service/set_centroresultado_config"
+        url = f"{get_dynamic_config('API_BASE_URL')}/cisspoder-service/set_centroresultado_config"
         response = requests.post(url, json=[dados], headers=headers)
 
         logger.info(f"📥 Status: {response.status_code}")
@@ -490,3 +583,199 @@ def atualizar_configuracao(request):
 def logout_view(request):
     request.session.flush()
     return redirect('login')
+
+# Configurar conexão
+def configurar_conexao(request):
+    if request.method == 'POST':
+        try:
+            # Parse JSON data
+            data = json.loads(request.body)
+            api_base_url = data.get('api_base_url')
+            
+            if not api_base_url:
+                return JsonResponse({
+                    'success': False, 
+                    'message': 'URL da API é obrigatória'
+                }, status=400)
+            
+            # Read current .env file
+            env_file_path = '.env'
+            try:
+                with open(env_file_path, 'r', encoding='utf-8') as f:
+                    env_content = f.read()
+            except FileNotFoundError:
+                # If .env doesn't exist, create from template
+                env_content = """# Configurações do Django
+DEBUG=False
+SECRET_KEY=django-insecure-x1dkg(z5ie%a0!h&dw6ls*ublu7=i@11w)9v6)ithl&+j0@6@-
+# Hosts permitidos
+ALLOWED_HOSTS=127.0.0.1,localhost
+# URL da API externa
+API_BASE_URL=http://200.141.41.20:8086
+# Credenciais da API
+CLIENT_ID=cisspoder-oauth
+CLIENT_SECRET=poder7547
+API_USERNAME=integracao
+API_PASSWORD=13579
+# Configurações de segurança
+CSRF_TRUSTED_ORIGINS=
+# Configurações de logging
+LOG_LEVEL=INFO
+"""
+            
+            # Update API_BASE_URL in .env content
+            lines = env_content.split('\n')
+            updated_lines = []
+            api_url_updated = False
+            
+            for line in lines:
+                if line.startswith('API_BASE_URL='):
+                    updated_lines.append(f'API_BASE_URL={api_base_url}')
+                    api_url_updated = True
+                else:
+                    updated_lines.append(line)
+            
+            # If API_BASE_URL wasn't found, add it
+            if not api_url_updated:
+                # Find the right place to insert (after Django settings)
+                insert_index = 0
+                for i, line in enumerate(lines):
+                    if line.startswith('# URL da API externa') or line.startswith('API_BASE_URL='):
+                        insert_index = i + 1
+                        break
+                
+                # Insert the new API_BASE_URL
+                if insert_index < len(lines):
+                    lines.insert(insert_index, f'API_BASE_URL={api_base_url}')
+                else:
+                    lines.append(f'API_BASE_URL={api_base_url}')
+                
+                updated_lines = lines
+            
+            # Write updated .env file
+            with open(env_file_path, 'w', encoding='utf-8') as f:
+                f.write('\n'.join(updated_lines))
+            
+            logger.info(f"✅ Configuração de conexão atualizada: {api_base_url}")
+            
+            # Force reload of environment variables
+            from decouple import Config, RepositoryEnv
+            import os
+            
+            # Clear any cached config
+            if hasattr(config, '_config'):
+                delattr(config, '_config')
+            
+            # Reload environment variables
+            try:
+                # Force reload by clearing cache
+                os.environ.pop('API_BASE_URL', None)
+                
+                # Reload from .env file
+                from decouple import config as reload_config
+                reload_config._config = None  # Clear cache
+                reload_config._config = RepositoryEnv('.env')
+                
+                logger.info("🔄 Configurações recarregadas com sucesso!")
+                
+            except Exception as reload_error:
+                logger.warning(f"⚠️ Aviso: Não foi possível recarregar automaticamente. Reinicie a aplicação para aplicar as mudanças. Erro: {reload_error}")
+            
+            return JsonResponse({
+                'success': True,
+                'message': 'Configuração salva com sucesso! A aplicação foi recarregada automaticamente.',
+                'api_base_url': api_base_url,
+                'reloaded': True
+            })
+            
+        except json.JSONDecodeError:
+            return JsonResponse({
+                'success': False,
+                'message': 'Dados JSON inválidos'
+            }, status=400)
+        except Exception as e:
+            logger.error(f"❌ Erro ao configurar conexão: {str(e)}")
+            return JsonResponse({
+                'success': False,
+                'message': f'Erro interno: {str(e)}'
+            }, status=500)
+    
+    return JsonResponse({
+        'success': False,
+        'message': 'Método não permitido'
+    }, status=405)
+
+# Testar conexão
+def testar_conexao(request):
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            api_base_url = data.get('api_base_url')
+            
+            if not api_base_url:
+                return JsonResponse({
+                    'success': False,
+                    'message': 'URL da API é obrigatória'
+                }, status=400)
+            
+            # Test connection with timeout
+            try:
+                response = requests.post(
+                    f"{api_base_url}/cisspoder-auth/oauth/token",
+                    data={
+                        'grant_type': 'password',
+                        'username': 'test',
+                        'password': 'test',
+                        'client_id': 'test',
+                        'client_secret': 'test'
+                    },
+                    headers={'Content-Type': 'application/x-www-form-urlencoded'},
+                    timeout=5
+                )
+                
+                # If we get any response (even error), connection is working
+                if response.status_code in [200, 400, 401, 403]:
+                    return JsonResponse({
+                        'success': True,
+                        'message': 'Conexão estabelecida com sucesso!',
+                        'status_code': response.status_code
+                    })
+                else:
+                    return JsonResponse({
+                        'success': False,
+                        'message': f'Conexão estabelecida, mas servidor retornou status {response.status_code}',
+                        'status_code': response.status_code
+                    })
+                    
+            except requests.exceptions.Timeout:
+                return JsonResponse({
+                    'success': False,
+                    'message': 'Timeout de conexão - servidor não respondeu em tempo hábil'
+                })
+            except requests.exceptions.ConnectionError:
+                return JsonResponse({
+                    'success': False,
+                    'message': 'Erro de conexão - verifique se o IP e porta estão corretos'
+                })
+            except Exception as e:
+                return JsonResponse({
+                    'success': False,
+                    'message': f'Erro inesperado: {str(e)}'
+                })
+                
+        except json.JSONDecodeError:
+            return JsonResponse({
+                'success': False,
+                'message': 'Dados JSON inválidos'
+            }, status=400)
+        except Exception as e:
+            logger.error(f"❌ Erro ao testar conexão: {str(e)}")
+            return JsonResponse({
+                'success': False,
+                'message': f'Erro interno: {str(e)}'
+            }, status=500)
+    
+    return JsonResponse({
+        'success': False,
+        'message': 'Método não permitido'
+    }, status=405)

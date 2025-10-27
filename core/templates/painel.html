@@ -6,16 +6,67 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
     th, td { white-space: nowrap; }
-    .sticky-header th {
+    
+    /* Container para scroll vertical */
+    .table-container {
+      max-height: 600px;
+      overflow-y: auto;
+      overflow-x: auto;
+    }
+    
+    /* Cabeçalho fixo - PRIMEIRA LINHA */
+    .sticky-header > tr:first-child th {
       position: sticky;
       top: 0;
-      background: #343a40;
-      color: white;
-      z-index: 2;
+      background: #343a40 !important;
+      color: white !important;
+      z-index: 102;
+      box-shadow: 0 2px 2px -1px rgba(0, 0, 0, 0.4);
+    }
+    
+    /* Segunda linha do cabeçalho também fixa */
+    .sticky-header > tr:nth-child(2) th {
+      position: sticky;
+      top: 38px; /* Altura da primeira linha (reduzida) */
+      background: #495057 !important;
+      color: white !important;
+      z-index: 101;
+      box-shadow: 0 2px 2px -1px rgba(0, 0, 0, 0.4);
+    }
+    
+    /* Garante que a célula com rowspan ocupe as duas linhas sem linha branca */
+    .sticky-header th[rowspan="2"] {
+      vertical-align: top;
+    }
+    
+    /* Reduz padding geral do cabeçalho */
+    .sticky-header th {
+      padding: 4px 12px !important;
+    }
+    
+    .sticky-header > tr:first-child th {
+      padding: 6px 12px !important;
+    }
+    
+    .sticky-header > tr:nth-child(2) th {
+      padding: 2px 12px !important;
+      font-size: 11px;
+      height: 34px;
+      vertical-align: middle;
     }
     .sub-header {
       font-size: 12px;
       font-weight: normal;
+    }
+    
+    /* Garante que o fundo laranja seja visível */
+    .bg-warning.bg-opacity-25 {
+      background-color: rgba(255, 193, 7, 0.3) !important;
+    }
+    
+    /* Adiciona cor laranja mais forte para teste */
+    .bg-laranja-previsto {
+      background-color: rgba(255, 165, 0, 0.4) !important;
     }
     .scroll-x {
       overflow-x: auto;
@@ -32,6 +83,73 @@
       padding-left: 15px;
       padding-right: 15px;
     }
+    
+    /* Paleta COE - Estilo dos filtros */
+    .filtros-section {
+      background: linear-gradient(135deg, #004AAD, #1ABC9C);
+      padding: 15px;
+      border-radius: 10px;
+      margin-bottom: 20px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    
+    .filtros-section .form-label {
+      color: white !important;
+      font-weight: 500;
+    }
+    
+    .filtros-section .form-select,
+    .filtros-section .form-control {
+      background-color: rgba(255, 255, 255, 0.95);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+    }
+    
+    .filtros-section .form-select:focus,
+    .filtros-section .form-control:focus {
+      background-color: white;
+      border-color: rgba(255, 255, 255, 0.5);
+      box-shadow: 0 0 0 0.2rem rgba(255, 255, 255, 0.5);
+    }
+    
+    .filtros-section .btn-primary {
+      background-color: #FF6B00 !important;
+      color: #FFFFFF !important;
+      border: none !important;
+      font-weight: 500 !important;
+    }
+    
+    .filtros-section .btn-primary:hover {
+      background-color: #e85500 !important;
+      transform: translateY(-1px);
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+      color: #FFFFFF !important;
+    }
+    
+    .filtros-section .btn-success {
+      background-color: #546E7A !important;
+      color: #FFFFFF !important;
+      border: none !important;
+      font-weight: 500 !important;
+    }
+    
+    .filtros-section .btn-success:hover {
+      background-color: #455a64 !important;
+      transform: translateY(-1px);
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+      color: #FFFFFF !important;
+    }
+    
+    .filtros-section .btn-secondary {
+      background: rgba(255, 255, 255, 0.2);
+      color: white;
+      border: 1px solid rgba(255, 255, 255, 0.3);
+    }
+    
+    .filtros-section .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.3);
+      color: white;
+    }
+    
     pre.debug-block {
       background: #f8f9fa;
       padding: 10px;
@@ -184,6 +302,50 @@
       max-width: 80px;
       text-align: center;
     }
+    
+    /* Fundo gradiente COE para toda a página */
+    body {
+      background: linear-gradient(135deg, #004AAD, #1ABC9C);
+      min-height: 100vh;
+    }
+    
+    /* Container principal com fundo transparente */
+    .container.py-5 {
+      background: transparent;
+    }
+    
+    /* Garante que a tabela tenha fundo branco */
+    .table-container,
+    .scroll-x {
+      background: white;
+      border-radius: 8px;
+      padding: 15px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+    
+    /* Info box também com fundo branco */
+    .alert-info {
+      background: rgba(255, 255, 255, 0.95) !important;
+      border: 1px solid rgba(255, 255, 255, 0.3) !important;
+    }
+    
+    /* Título em branco para contrastar com o fundo gradiente */
+    h2 {
+      color: white !important;
+      text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+      font-weight: 600;
+    }
+    
+    h4 {
+      color: white !important;
+      text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+      font-weight: 500;
+    }
+    
+    /* Subtítulo "Mostrando" também em branco */
+    small {
+      color: rgba(255, 255, 255, 0.95) !important;
+    }
   </style>
 </head>
 <body>
@@ -191,13 +353,13 @@
 
 <div class="container py-5">
   <div class="d-flex justify-content-between align-items-center mb-3">
-    <h2>Centro de Resultados - Previsão</h2>
+    <h2>Controle de Orçamento Empresarial</h2>
     <div>
-      <a href="{% url 'logout' %}" class="btn btn-outline-danger btn-sm">Sair</a>
+      <a href="{% url 'logout' %}" class="btn btn-danger btn-sm" style="background-color: #dc3545 !important; color: white !important; border: none; font-weight: 500;">🚪 Sair</a>
     </div>
   </div>
 
-  <form method="post" class="border p-2 rounded mb-3 bg-light">
+  <form method="post" class="filtros-section">
     {% csrf_token %}
     <div class="row g-2 align-items-end">
       <div class="col-md-2">
@@ -214,12 +376,12 @@
         <div class="autocomplete-wrapper">
           <input type="text" id="centro-search" class="form-control form-control-sm" placeholder="Digite para pesquisar centros..." autocomplete="off">
           <select name="centro" class="form-select form-select-sm" id="centro-select" style="display: none;">
-            <option value="">Todos</option>
-            {% for cr in centros %}
-              <option value="{{ cr.idcentroresultado }}" {% if request.POST.centro == cr.idcentroresultado|stringformat:"s" %}selected{% endif %}>{{ cr.centroresultados }}</option>
-            {% endfor %}
-          </select>
-        </div>
+          <option value="">Todos</option>
+          {% for cr in centros %}
+            <option value="{{ cr.idcentroresultado }}" {% if request.POST.centro == cr.idcentroresultado|stringformat:"s" %}selected{% endif %}>{{ cr.centroresultados }}</option>
+          {% endfor %}
+        </select>
+      </div>
       </div>
       <div class="col-md-1">
         <label class="form-label small mb-1">Ano</label>
@@ -234,7 +396,7 @@
 
   {% if request.method == "POST" %}
     <div class="mb-2">
-      <small class="text-muted">
+      <small style="color: white !important; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);">
         📌 <strong>Filtros:</strong> Ano: {{ request.POST.ano }} | 
         Empresa: {{ request.POST.empresa|default:"(Todas)" }} | 
         Centro: {{ request.POST.centro|default:"(Todos)" }}
@@ -243,8 +405,8 @@
   {% endif %}
 
   {% if agrupar_por_centro and agrupado_por_centro %}
-    <h4 class="mb-3">📊 Tabela Agrupada por Centro de Resultados</h4>
-    <div class="scroll-x">
+    <h4 class="mb-3">📊 Controle de Orçamento por Centro de Resultados</h4>
+    <div class="scroll-x table-container">
       <table class="table table-bordered table-sm table-striped">
         <thead class="table-dark sticky-header">
           <tr>
@@ -282,7 +444,7 @@
                   {% with mes_dados=dados_mes|get_item:mes_num %}
                     {% if mes_dados %}
                       <td class="text-end valor-col {% if forloop.counter0|divisibleby:2 %}mes-bg-1{% else %}mes-bg-2{% endif %}">R$ {{ mes_dados.ano_anterior|floatformat:2 }}</td>
-                      <td class="text-end valor-col {% if forloop.counter0|divisibleby:2 %}mes-bg-1{% else %}mes-bg-2{% endif %}">R$ {{ mes_dados.previsto|floatformat:2 }}</td>
+                      <td class="text-end valor-col {% if forloop.counter0|divisibleby:2 %}mes-bg-1{% else %}mes-bg-2{% endif %} {{ mes_dados.previsto|get_previsto_color:mes_dados.ano_anterior }}">R$ {{ mes_dados.previsto|floatformat:2 }}</td>
                       <td class="text-end valor-col {% if forloop.counter0|divisibleby:2 %}mes-bg-1{% else %}mes-bg-2{% endif %} {{ mes_dados.realizado|get_valor_color:mes_dados.previsto }}">R$ {{ mes_dados.realizado|floatformat:2 }}</td>
                     {% else %}
                       <td class="text-end valor-col {% if forloop.counter0|divisibleby:2 %}mes-bg-1{% else %}mes-bg-2{% endif %}">R$ 0,00</td>
@@ -292,9 +454,9 @@
                   {% endwith %}
                 {% endfor %}
                 <!-- Totais anuais da conta -->
-                {% with realizado_total=totais_anuais_conta|get_item:conta|get_item:"realizado_total"|default:0 previsto_total=totais_anuais_conta|get_item:conta|get_item:"previsto_total"|default:0 %}
-                <td class="text-end valor-col bg-primary text-white">R$ {{ totais_anuais_conta|get_item:conta|get_item:"ano_anterior_total"|default:0|floatformat:2 }}</td>
-                <td class="text-end valor-col bg-primary text-white">R$ {{ previsto_total|floatformat:2 }}</td>
+                {% with realizado_total=totais_anuais_conta|get_item:conta|get_item:"realizado_total"|default:0 previsto_total=totais_anuais_conta|get_item:conta|get_item:"previsto_total"|default:0 ano_anterior_total=totais_anuais_conta|get_item:conta|get_item:"ano_anterior_total"|default:0 %}
+                <td class="text-end valor-col bg-primary text-white">R$ {{ ano_anterior_total|floatformat:2 }}</td>
+                <td class="text-end valor-col bg-primary text-white {{ previsto_total|get_previsto_color:ano_anterior_total }}">R$ {{ previsto_total|floatformat:2 }}</td>
                 <td class="text-end valor-col bg-primary text-white {{ realizado_total|get_valor_color:previsto_total }}">R$ {{ realizado_total|floatformat:2 }}</td>
                 {% endwith %}
               </tr>
@@ -311,9 +473,9 @@
                 {% endwith %}
               {% endfor %}
               <!-- Totais anuais do centro -->
-              {% with realizado_total=totalizadores_centro|get_item:centro|get_item:"realizado_total"|default:0 previsto_total=totalizadores_centro|get_item:centro|get_item:"previsto_total"|default:0 %}
-              <td class="text-end valor-col bg-primary text-white">R$ {{ totalizadores_centro|get_item:centro|get_item:"ano_anterior_total"|default:0|floatformat:2 }}</td>
-              <td class="text-end valor-col bg-primary text-white">R$ {{ previsto_total|floatformat:2 }}</td>
+              {% with realizado_total=totalizadores_centro|get_item:centro|get_item:"realizado_total"|default:0 previsto_total=totalizadores_centro|get_item:centro|get_item:"previsto_total"|default:0 ano_anterior_total=totalizadores_centro|get_item:centro|get_item:"ano_anterior_total"|default:0 %}
+              <td class="text-end valor-col bg-primary text-white">R$ {{ ano_anterior_total|floatformat:2 }}</td>
+              <td class="text-end valor-col bg-primary text-white {{ previsto_total|get_previsto_color:ano_anterior_total }}">R$ {{ previsto_total|floatformat:2 }}</td>
               <td class="text-end valor-col bg-primary text-white {{ realizado_total|get_valor_color:previsto_total }}">R$ {{ realizado_total|floatformat:2 }}</td>
               {% endwith %}
             </tr>
@@ -328,7 +490,7 @@
     </div>
   {% elif agrupado %}
     <h4 class="mb-3">📊 Tabela Agrupada por Conta Contábil</h4>
-    <div class="scroll-x">
+    <div class="scroll-x table-container">
       <table class="table table-bordered table-sm table-striped">
         <thead class="table-dark sticky-header">
           <tr>
@@ -357,7 +519,7 @@
                 {% with mes_dados=dados_mes|get_item:mes_num %}
                   {% if mes_dados %}
                     <td class="text-end valor-col {% if forloop.counter0|divisibleby:2 %}mes-bg-1{% else %}mes-bg-2{% endif %}">R$ {{ mes_dados.ano_anterior|floatformat:2 }}</td>
-                    <td class="text-end valor-col {% if forloop.counter0|divisibleby:2 %}mes-bg-1{% else %}mes-bg-2{% endif %}">R$ {{ mes_dados.previsto|floatformat:2 }}</td>
+                    <td class="text-end valor-col {% if forloop.counter0|divisibleby:2 %}mes-bg-1{% else %}mes-bg-2{% endif %} {{ mes_dados.previsto|get_previsto_color:mes_dados.ano_anterior }}">R$ {{ mes_dados.previsto|floatformat:2 }}</td>
                     <td class="text-end valor-col {% if forloop.counter0|divisibleby:2 %}mes-bg-1{% else %}mes-bg-2{% endif %} {{ mes_dados.realizado|get_valor_color:mes_dados.previsto }}">R$ {{ mes_dados.realizado|floatformat:2 }}</td>
                   {% else %}
                     <td class="text-end valor-col {% if forloop.counter0|divisibleby:2 %}mes-bg-1{% else %}mes-bg-2{% endif %}">R$ 0,00</td>
@@ -367,9 +529,9 @@
                 {% endwith %}
               {% endfor %}
               <!-- Totais anuais da conta -->
-              {% with realizado_total=totais_anuais_conta|get_item:conta|get_item:"realizado_total"|default:0 previsto_total=totais_anuais_conta|get_item:conta|get_item:"previsto_total"|default:0 %}
-              <td class="text-end valor-col bg-primary text-white">R$ {{ totais_anuais_conta|get_item:conta|get_item:"ano_anterior_total"|default:0|floatformat:2 }}</td>
-              <td class="text-end valor-col bg-primary text-white">R$ {{ previsto_total|floatformat:2 }}</td>
+              {% with realizado_total=totais_anuais_conta|get_item:conta|get_item:"realizado_total"|default:0 previsto_total=totais_anuais_conta|get_item:conta|get_item:"previsto_total"|default:0 ano_anterior_total=totais_anuais_conta|get_item:conta|get_item:"ano_anterior_total"|default:0 %}
+              <td class="text-end valor-col bg-primary text-white">R$ {{ ano_anterior_total|floatformat:2 }}</td>
+              <td class="text-end valor-col bg-primary text-white {{ previsto_total|get_previsto_color:ano_anterior_total }}">R$ {{ previsto_total|floatformat:2 }}</td>
               <td class="text-end valor-col bg-primary text-white {{ realizado_total|get_valor_color:previsto_total }}">R$ {{ realizado_total|floatformat:2 }}</td>
               {% endwith %}
             </tr>
@@ -400,8 +562,8 @@
                 <td class="text-end valor-col bg-primary text-white">R$ {{ previsto_total|floatformat:2 }}</td>
                 <td class="text-end valor-col bg-primary text-white {{ realizado_total|get_valor_color:previsto_total }}">R$ {{ realizado_total|floatformat:2 }}</td>
                 {% endwith %}
-              </tr>
-            {% endfor %}
+            </tr>
+          {% endfor %}
           {% endif %}
         </tbody>
       </table>

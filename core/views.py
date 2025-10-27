@@ -187,14 +187,26 @@ def painel_view(request):
             ]
         }
 
-        if empresa:
+        # Sempre adicionar cláusula de empresa
+        if empresa and empresa.strip():
             try:
                 emp_int = int(empresa)
                 payload["clausulas"].append({
                     "campo": "idempfiltro", "operadorlogico": "AND", "operador": "IGUAL", "valor": emp_int
                 })
+                logger.info(f"🏢 Empresa específica selecionada: {emp_int}")
             except ValueError:
                 logger.warning(f"⚠️ Empresa inválida: {empresa}")
+                # Se empresa inválida, enviar null
+                payload["clausulas"].append({
+                    "campo": "idempfiltro", "operadorlogico": "AND", "operador": "IGUAL", "valor": None
+                })
+        else:
+            # Se empresa estiver vazia ou for "Todas", enviar null
+            payload["clausulas"].append({
+                "campo": "idempfiltro", "operadorlogico": "AND", "operador": "IGUAL", "valor": None
+            })
+            logger.info("🏢 Filtro de empresa: 'Todas' selecionado - enviando null")
 
         # Sempre adicionar a cláusula de centro de resultados
         if centro and centro.strip():
@@ -443,20 +455,49 @@ def configuracao_view(request):
         'Content-Type': 'application/json'
     }
 
-    def post_api(endpoint):
+    def post_api(endpoint, use_pagination=False):
         url = f"{get_dynamic_config('API_BASE_URL')}/cisspoder-service/{endpoint}"
+        all_data = []
+        
         try:
-            resp = requests.post(url, json={"page": 1}, headers=headers)
-            if resp.status_code == 200:
-                return resp.json().get("data", [])
+            if use_pagination:
+                # Implementar paginação similar ao painel
+                page = 1
+                while True:
+                    payload = {
+                        "page": page,
+                        "limit": 1000
+                    }
+                    resp = requests.post(url, json=payload, headers=headers)
+                    
+                    if resp.status_code == 200:
+                        response_data = resp.json()
+                        page_data = response_data.get("data", [])
+                        has_next = response_data.get("hasNext", False)
+                        
+                        all_data.extend(page_data)
+                        logger.info(f"📄 Endpoint '{endpoint}' - Página {page}: {len(page_data)} registros")
+                        
+                        if not has_next:
+                            break
+                        page += 1
+                    else:
+                        logger.warning(f"⚠️ Endpoint '{endpoint}' retornou {resp.status_code} na página {page}")
+                        break
+            else:
+                # Sem paginação (para endpoints pequenos)
+                resp = requests.post(url, json={"page": 1}, headers=headers)
+                if resp.status_code == 200:
+                    all_data = resp.json().get("data", [])
         except Exception:
             logger.exception(f"❌ Erro ao buscar {endpoint}")
-        return []
+        
+        return all_data
 
     empresas = post_api('cadastro_empresa')
     centros = post_api('cadastro_centroresultados')
     contas = post_api('cadastro_contabil')
-    configuracoes = post_api('centroresultado_config')
+    configuracoes = post_api('centroresultado_config', use_pagination=True)
 
     meses = [
         ('1', 'Janeiro'), ('2', 'Fevereiro'), ('3', 'Março'),

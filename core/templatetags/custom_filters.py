@@ -67,3 +67,27 @@ def get_valor_color(realizado, previsto):
         return ""
     except (ValueError, TypeError, AttributeError):
         return ""
+
+@register.filter
+def get_previsto_color(previsto, ano_anterior):
+    """Retorna a classe CSS para fundo laranja se previsto > ano anterior"""
+    try:
+        # Garantir que os valores são numéricos
+        if previsto is None or previsto == "":
+            previsto_val = 0
+        else:
+            previsto_val = float(previsto)
+            
+        if ano_anterior is None or ano_anterior == "":
+            ano_ant_val = 0
+        else:
+            ano_ant_val = float(ano_anterior)
+        
+        # Se previsto > ano anterior, laranja claro
+        if previsto_val > ano_ant_val and ano_ant_val > 0:
+            return "bg-warning bg-opacity-25 bg-laranja-previsto"
+        
+        # Caso contrário, sem cor especial
+        return ""
+    except (ValueError, TypeError, AttributeError):
+        return ""

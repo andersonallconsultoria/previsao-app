@@ -129,10 +129,33 @@
       <a href="{% url 'painel' %}" class="btn btn-secondary">⬅ Voltar</a>
     </div>
     
+    {% if success_message %}
+    <div id="success-alert" class="alert alert-success alert-dismissible fade show" role="alert">
+      <strong>✅ Sucesso!</strong> {{ success_message }}
+      <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    {% endif %}
+    
+    {% if error_message %}
+    <div id="error-alert" class="alert alert-danger alert-dismissible fade show" role="alert">
+      <strong>❌ Erro!</strong> {{ error_message }}
+      <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    {% endif %}
+    
     <form method="post" action="{% url 'salvar_configuracao' %}" class="coe-section">
       {% csrf_token %}
       <div class="row mb-3">
-        <div class="col-md-4">
+        <div class="col-md-3">
+          <label class="form-label">Ano de Cadastro</label>
+          <select name="anocadastro" class="form-select" required>
+            <option value="">Selecione...</option>
+            <option value="2025">2025</option>
+            <option value="2026">2026</option>
+            <option value="2027">2027</option>
+          </select>
+        </div>
+        <div class="col-md-3">
           <label class="form-label">Empresa</label>
           <select name="empresa" class="form-select" required>
             <option value="">Selecione...</option>
@@ -193,7 +216,16 @@
     <h4>Configurações Existentes</h4>
     {% if configuracoes %}
       <div class="mb-3 row g-2 filtros-config">
-        <div class="col-md-4">
+        <div class="col-md-3">
+          <label class="form-label">🔍 Filtrar por Ano</label>
+          <select class="form-select form-select-sm" id="filter-ano">
+            <option value="">Todos os anos</option>
+            <option value="2025">2025</option>
+            <option value="2026">2026</option>
+            <option value="2027">2027</option>
+          </select>
+        </div>
+        <div class="col-md-3">
           <label class="form-label">🔍 Filtrar por Empresa</label>
           <select class="form-select form-select-sm" id="filter-empresa">
             <option value="">Todas as empresas</option>
@@ -202,7 +234,7 @@
             {% endfor %}
           </select>
         </div>
-        <div class="col-md-4">
+        <div class="col-md-3">
           <label class="form-label">🔍 Filtrar por Centro</label>
           <select class="form-select form-select-sm" id="filter-centro">
             <option value="">Todos os centros</option>
@@ -211,7 +243,7 @@
             {% endfor %}
           </select>
         </div>
-        <div class="col-md-4">
+        <div class="col-md-3">
           <label class="form-label">🔍 Filtrar por Conta</label>
           <select class="form-select form-select-sm" id="filter-conta">
             <option value="">Todas as contas</option>
@@ -227,6 +259,7 @@
           <thead class="table-dark sticky-top">
             <tr>
               <th>#</th>
+            <th>Ano</th>
             <th>Empresa</th>
             <th>Centro Resultado</th>
             <th>Conta Contábil</th>
@@ -240,6 +273,7 @@
           {% for item in configuracoes %}
             <tr data-id="{{ forloop.counter0 }}" class="config-row">
               <td>{{ forloop.counter }}</td>
+            <td class="ano">{{ item.anocadastro|default:"-" }}</td>
             <td class="empresa">{{ item.ideempprevisao }}</td>
             <td class="centro">{{ item.idcentroresultado }}</td>
             <td class="conta">{{ item.idctacontabil }}</td>
@@ -297,7 +331,7 @@
           }
           
           // Armazenar todas as linhas originais
-          const allRows = Array.from(document.querySelectorAll('.config-row'));
+          let allRows = Array.from(document.querySelectorAll('.config-row'));
           
           // Função para aplicar event listeners
           function bindEventListeners() {
@@ -384,20 +418,23 @@
           
           // Filtros (tornar global)
           window.applyFilters = function() {
+            const anoFilter = document.getElementById('filter-ano').value;
             const empresaFilter = document.getElementById('filter-empresa').value;
             const centroFilter = document.getElementById('filter-centro').value;
             const contaFilter = document.getElementById('filter-conta').value;
             
             filteredRows = allRows.filter(row => {
+              const ano = row.querySelector('.ano') ? row.querySelector('.ano').textContent.trim() : '';
               const empresa = row.querySelector('.empresa').textContent.trim();
               const centro = row.querySelector('.centro').textContent.trim();
               const conta = row.querySelector('.conta').textContent.trim();
               
+              const matchAno = !anoFilter || ano === anoFilter;
               const matchEmpresa = !empresaFilter || empresa === empresaFilter;
               const matchCentro = !centroFilter || centro === centroFilter;
               const matchConta = !contaFilter || conta === contaFilter;
               
-              return matchEmpresa && matchCentro && matchConta;
+              return matchAno && matchEmpresa && matchCentro && matchConta;
             });
             
             currentPage = 1;
@@ -405,6 +442,7 @@
             bindEventListeners();
           }
           
+          document.getElementById('filter-ano').addEventListener('change', applyFilters);
           document.getElementById('filter-empresa').addEventListener('change', applyFilters);
           document.getElementById('filter-centro').addEventListener('change', applyFilters);
           // Event listener para filter-conta será adicionado pelo Select2
@@ -439,7 +477,7 @@
               tr.dataset.old = tr.innerHTML;
               // Troca células por inputs
               tr.querySelectorAll('td').forEach(function(td, idx) {
-                if (td.classList.contains('empresa') || td.classList.contains('centro') || td.classList.contains('conta') || td.classList.contains('mes') || td.classList.contains('tipo') || td.classList.contains('valor')) {
+                if (td.classList.contains('empresa') || td.classList.contains('centro') || td.classList.contains('conta') || td.classList.contains('mes') || td.classList.contains('tipo') || td.classList.contains('valor') || td.classList.contains('ano')) {
                   const valor = td.textContent.trim().replace(/\s+/g, '');
                   let input = '';
                   if (td.classList.contains('tipo')) {
@@ -481,6 +519,7 @@
             btn.addEventListener('click', function() {
               if (!editando) return;
               const tr = editando;
+              const ano = tr.querySelector('.ano input, .ano select')?.value;
               const empresa = tr.querySelector('.empresa input, .empresa select')?.value;
               const centro = tr.querySelector('.centro input, .centro select')?.value;
               const conta = tr.querySelector('.conta input, .conta select')?.value;
@@ -490,6 +529,7 @@
               
               // Envia dados para o backend
               const formData = new FormData();
+              formData.append('anocadastro', ano);
               formData.append('empresa', empresa);
               formData.append('centro', centro);
               formData.append('conta', conta);
@@ -506,7 +546,7 @@
               .then(data => {
                 if (data.success) {
                   // Atualiza a linha com os novos valores
-                  editando.innerHTML = `<td class="empresa">${empresa}</td><td class="centro">${centro}</td><td class="conta">${conta}</td><td class="mes">${mes}</td><td class="tipo">${tipo}</td><td class="valor">${valor}</td><td><button type='button' class='btn btn-sm btn-outline-primary btn-editar'>Editar</button><button type='button' class='btn btn-sm btn-success btn-salvar d-none'>Salvar</button><button type='button' class='btn btn-sm btn-secondary btn-cancelar d-none'>Cancelar</button></td>`;
+                  editando.innerHTML = `<td>${editando.querySelector('td:first-child').textContent}</td><td class="ano">${ano}</td><td class="empresa">${empresa}</td><td class="centro">${centro}</td><td class="conta">${conta}</td><td class="mes">${mes}</td><td class="tipo">${tipo}</td><td class="valor">${valor}</td><td><button type='button' class='btn btn-sm btn-outline-primary btn-editar'>Editar</button><button type='button' class='btn btn-sm btn-success btn-salvar d-none'>Salvar</button><button type='button' class='btn btn-sm btn-secondary btn-cancelar d-none'>Cancelar</button><button type='button' class='btn btn-sm btn-outline-danger btn-excluir ms-1'>🗑️ Excluir</button></td>`;
                   editando = null;
                   // Reaplica eventos
                   document.querySelectorAll('.btn-editar').forEach(function(btn) {
@@ -533,12 +573,15 @@
               }
               
               const tr = btn.closest('tr');
+              const anoElement = tr.querySelector('.ano');
+              const ano = anoElement ? anoElement.textContent.trim() : '-';
               const empresa = tr.querySelector('.empresa').textContent.trim();
               const centro = tr.querySelector('.centro').textContent.trim();
               const conta = tr.querySelector('.conta').textContent.trim();
               const mes = tr.querySelector('.mes').textContent.trim();
               
               console.log('🗑️ Dados para exclusão:', {
+                ano: ano,
                 empresa: empresa,
                 centro: centro,
                 conta: conta,
@@ -547,6 +590,7 @@
               
               // Envia dados para exclusão
               const formData = new FormData();
+              formData.append('anocadastro', ano);
               formData.append('empresa', empresa);
               formData.append('centro', centro);
               formData.append('conta', conta);
@@ -564,8 +608,17 @@
               .then(response => response.json())
               .then(data => {
                 if (data.success) {
-                  // Remove a linha da tabela
-                  tr.remove();
+                  // Remove a linha da tabela e atualiza os dados
+                  allRows = allRows.filter(row => row !== tr);
+                  filteredRows = filteredRows.filter(row => row !== tr);
+                  
+                  // Se não há mais linhas na página atual e há páginas anteriores, volta para página anterior
+                  if (filteredRows.length > 0 && filteredRows.length <= (currentPage - 1) * itemsPerPage && currentPage > 1) {
+                    currentPage--;
+                  }
+                  
+                  // Re-renderiza a página
+                  renderPage();
                   alert('Configuração excluída com sucesso!');
                 } else {
                   alert('Erro ao excluir: ' + data.message);
@@ -637,5 +690,53 @@
       <div class="alert alert-info">Nenhuma configuração encontrada.</div>
     {% endif %}
   </div>
+  
+  <script>
+    // Auto-fechar mensagens de sucesso/erro após 5 segundos
+    document.addEventListener('DOMContentLoaded', function() {
+      const successAlert = document.getElementById('success-alert');
+      const errorAlert = document.getElementById('error-alert');
+      
+      if (successAlert) {
+        setTimeout(function() {
+          try {
+            if (typeof bootstrap !== 'undefined') {
+              const bsAlert = new bootstrap.Alert(successAlert);
+              bsAlert.close();
+            } else {
+              // Fallback se bootstrap não estiver disponível
+              successAlert.classList.remove('show');
+              setTimeout(() => successAlert.remove(), 300);
+            }
+          } catch (e) {
+            // Fallback final
+            successAlert.style.transition = 'opacity 0.3s';
+            successAlert.style.opacity = '0';
+            setTimeout(() => successAlert.remove(), 300);
+          }
+        }, 5000); // 5 segundos
+      }
+      
+      if (errorAlert) {
+        setTimeout(function() {
+          try {
+            if (typeof bootstrap !== 'undefined') {
+              const bsAlert = new bootstrap.Alert(errorAlert);
+              bsAlert.close();
+            } else {
+              // Fallback se bootstrap não estiver disponível
+              errorAlert.classList.remove('show');
+              setTimeout(() => errorAlert.remove(), 300);
+            }
+          } catch (e) {
+            // Fallback final
+            errorAlert.style.transition = 'opacity 0.3s';
+            errorAlert.style.opacity = '0';
+            setTimeout(() => errorAlert.remove(), 300);
+          }
+        }, 8000); // 8 segundos (erro fica mais tempo)
+      }
+    });
+  </script>
 </body>
 </html>

@@ -506,15 +506,28 @@ def configuracao_view(request):
         ('10', 'Outubro'), ('11', 'Novembro'), ('12', 'Dezembro'),
     ]
 
+    # Buscar mensagens de sucesso/erro da sessão
+    success_message = request.session.pop('success_message', None)
+    error_message = request.session.pop('error_message', None)
+    
     return render(request, 'configuracao.html', {
         'empresas': empresas,
         'centros': centros,
         'contas': contas,
         'configuracoes': configuracoes,
-        'meses': meses
+        'meses': meses,
+        'success_message': success_message,
+        'error_message': error_message
     })
 
 # Salvar configuração
+def get_anocadastro(request):
+    """Helper para obter ano de cadastro, tratando valores vazios ou '-'"""
+    ano = request.POST.get("anocadastro", "").strip()
+    if ano and ano != "-" and ano.isdigit():
+        return int(ano)
+    return None
+
 @token_required
 def salvar_configuracao(request):
     if request.method == 'POST':
@@ -535,6 +548,7 @@ def salvar_configuracao(request):
                 "IN_VALORPREVISAO": 0.0,  # Valor padrão para exclusão
                 "IN_IDCENTRORESULTADO": int(request.POST["centro"]),
                 "IN_MESPREVISAO": int(request.POST["mes"]) if request.POST.get("mes") else None,
+                "IN_ANOCADASTRO": get_anocadastro(request),
                 "IN_ACAO": "D"  # Indica ação de DELETE
             }
 
@@ -543,6 +557,7 @@ def salvar_configuracao(request):
             logger.info(f"   - Centro: {request.POST['centro']}")
             logger.info(f"   - Conta: {request.POST['conta']}")
             logger.info(f"   - Mês: {request.POST.get('mes', 'None')}")
+            logger.info(f"   - Ano: {request.POST.get('anocadastro', 'None')}")
             logger.info(f"   - Ação: {acao}")
 
             logger.info("🗑️ Excluindo configuração:")
@@ -571,6 +586,7 @@ def salvar_configuracao(request):
                 "IN_VALORPREVISAO": float(request.POST["valor"]),
                 "IN_IDCENTRORESULTADO": int(request.POST["centro"]),
                 "IN_MESPREVISAO": int(request.POST["mes"]) if request.POST.get("mes") else None,
+                "IN_ANOCADASTRO": get_anocadastro(request),
                 "IN_ACAO": "I"  # Indica ação de INSERT/UPDATE
             }
 
@@ -582,6 +598,11 @@ def salvar_configuracao(request):
 
             logger.info(f"📥 Status: {response.status_code}")
             logger.info(f"📥 Resposta: {response.text}")
+
+            if response.status_code == 200:
+                request.session['success_message'] = 'Configuração salva com sucesso!'
+            else:
+                request.session['error_message'] = f'Erro ao salvar: {response.text}'
 
             return redirect('configuracao')
 
@@ -601,6 +622,7 @@ def atualizar_configuracao(request):
             "IN_VALORPREVISAO": float(request.POST["valor"]),
             "IN_IDCENTRORESULTADO": int(request.POST["centro"]),
             "IN_MESPREVISAO": int(request.POST["mes"]) if request.POST.get("mes") else None,
+            "IN_ANOCADASTRO": int(request.POST["anocadastro"]) if request.POST.get("anocadastro") else None,
             "IN_ACAO": "I"  # Indica ação de INSERT/UPDATE
         }
 

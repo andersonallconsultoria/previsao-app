@@ -486,7 +486,7 @@ def configuracao_view(request):
                         break
             else:
                 # Sem paginação (para endpoints pequenos)
-                resp = requests.post(url, json={"page": 1}, headers=headers)
+                resp = requests.post(url, json={"limit": 1000, "page": 1}, headers=headers)
                 if resp.status_code == 200:
                     all_data = resp.json().get("data", [])
         except Exception:

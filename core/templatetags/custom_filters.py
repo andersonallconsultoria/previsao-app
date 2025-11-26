@@ -70,7 +70,12 @@ def get_valor_color(realizado, previsto):
 
 @register.filter
 def get_previsto_color(previsto, ano_anterior):
-    """Retorna a classe CSS para fundo laranja se previsto > ano anterior"""
+    """Retorna a classe CSS para fundo laranja se previsto > ano anterior.
+
+    Regra ajustada:
+    - Se o valor de PREVISTO for maior que o valor de ANO ANTERIOR, a célula fica amarela,
+      mesmo que o ANO ANTERIOR seja 0 (ou vazio).
+    """
     try:
         # Garantir que os valores são numéricos
         if previsto is None or previsto == "":
@@ -84,7 +89,8 @@ def get_previsto_color(previsto, ano_anterior):
             ano_ant_val = float(ano_anterior)
         
         # Se previsto > ano anterior, laranja claro
-        if previsto_val > ano_ant_val and ano_ant_val > 0:
+        # (inclui caso em que ano_anterior == 0 e previsto > 0)
+        if previsto_val > ano_ant_val:
             return "bg-warning bg-opacity-25 bg-laranja-previsto"
         
         # Caso contrário, sem cor especial

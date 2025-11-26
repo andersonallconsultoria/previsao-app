@@ -359,3 +359,4 @@ docker-compose logs -f
 **🎉 Pronto! Sua aplicação está atualizada e rodando no AWS!**
 
 
+

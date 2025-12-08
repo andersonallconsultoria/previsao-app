@@ -389,7 +389,12 @@
       </div>
       <div class="col-md-2">
         <button type="submit" class="btn btn-primary btn-sm">🔍 Pesquisar</button>
+        {% if tem_acesso_configuracao %}
         <a href="{% url 'configuracao' %}" class="btn btn-success btn-sm ms-1">🔧 Configuração</a>
+        {% endif %}
+        {% if pode_gerenciar_usuarios %}
+        <a href="{% url 'configuracao_usuarios' %}" class="btn btn-info btn-sm ms-1">👥 Config. Usuários</a>
+        {% endif %}
       </div>
     </div>
   </form>

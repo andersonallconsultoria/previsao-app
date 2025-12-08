@@ -15,5 +15,8 @@ urlpatterns = [
     path('logout/', views.logout_view, name='logout'),
     #path('painel_debug/', painel_debug_view, name='painel_debug'),
     path('debug_resultados/', views.debug_resultados_view, name='debug_resultados'),
+    path('configuracao_usuarios/', views.configuracao_usuarios_view, name='configuracao_usuarios'),
+    path('gerenciar_usuarios_admin/', views.gerenciar_usuarios_admin, name='gerenciar_usuarios_admin'),
+    path('gerenciar_usuarios_config/', views.gerenciar_usuarios_config, name='gerenciar_usuarios_config'),
 
 ]

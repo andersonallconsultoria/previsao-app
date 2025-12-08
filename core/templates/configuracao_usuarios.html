@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <title>Configuração de Usuários</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    /* Paleta COE - Estilo dos filtros */
+    .coe-section {
+      background: linear-gradient(135deg, #004AAD, #1ABC9C);
+      padding: 20px;
+      border-radius: 12px;
+      margin-bottom: 25px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    
+    .coe-section .form-label {
+      color: white !important;
+      font-weight: 500;
+    }
+    
+    .coe-section .form-control {
+      background-color: rgba(255, 255, 255, 0.95);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+    }
+    
+    .coe-section .form-control:focus {
+      background-color: white;
+      border-color: rgba(255, 255, 255, 0.5);
+      box-shadow: 0 0 0 0.2rem rgba(255, 255, 255, 0.5);
+    }
+    
+    .coe-section .btn-primary {
+      background-color: #FF6B00 !important;
+      color: #FFFFFF !important;
+      border: none !important;
+      font-weight: 500 !important;
+    }
+    
+    .coe-section .btn-primary:hover {
+      background-color: #e85500 !important;
+      transform: translateY(-1px);
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+      color: #FFFFFF !important;
+    }
+    
+    .coe-section .btn-secondary {
+      background-color: #546E7A !important;
+      color: #FFFFFF !important;
+      border: none !important;
+      font-weight: 500 !important;
+    }
+    
+    .coe-section .btn-secondary:hover {
+      background-color: #455a64 !important;
+      transform: translateY(-1px);
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+      color: #FFFFFF !important;
+    }
+    
+    .coe-section .btn-danger {
+      background-color: #dc3545 !important;
+      color: #FFFFFF !important;
+      border: none !important;
+    }
+    
+    .coe-section .btn-danger:hover {
+      background-color: #c82333 !important;
+      color: #FFFFFF !important;
+    }
+    
+    /* Fundo gradiente COE para toda a página */
+    body {
+      background: linear-gradient(135deg, #004AAD, #1ABC9C);
+      min-height: 100vh;
+    }
+    
+    .container.py-5 {
+      background: transparent;
+    }
+    
+    .table-container {
+      background: white;
+      border-radius: 8px;
+      padding: 15px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      margin-bottom: 20px;
+    }
+    
+    h2 {
+      color: white !important;
+      text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+      font-weight: 600;
+    }
+    
+    h4 {
+      color: white !important;
+      text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+      font-weight: 500;
+    }
+    
+    .alert {
+      border-radius: 8px;
+    }
+  </style>
+</head>
+<body>
+<div class="container py-5">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h2>👥 Configuração de Usuários</h2>
+    <div>
+      <a href="{% url 'painel' %}" class="btn btn-secondary btn-sm">← Voltar</a>
+    </div>
+  </div>
+
+  {% if success_message %}
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+      {{ success_message }}
+      <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+  {% endif %}
+
+  {% if error_message %}
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+      {{ error_message }}
+      <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+  {% endif %}
+
+  <!-- Seção: Usuários que podem gerenciar usuários -->
+  <div class="coe-section">
+    <h4 class="mb-3">🔐 Usuários que podem gerenciar usuários</h4>
+    <p class="text-white mb-3">Estes usuários têm permissão para acessar esta tela e gerenciar outros usuários.</p>
+    
+    <div class="row g-2 mb-3">
+      <div class="col-md-6">
+        <label class="form-label">Nome do usuário</label>
+        <input type="text" id="usuario-admin-input" class="form-control" placeholder="Ex: JOÃO.SANTOS" style="text-transform: uppercase;">
+      </div>
+      <div class="col-md-6 d-flex align-items-end">
+        <button type="button" class="btn btn-primary me-2" onclick="adicionarUsuarioAdmin()">➕ Adicionar</button>
+      </div>
+    </div>
+
+    <div class="table-container">
+      <h5 class="mb-3">Usuários cadastrados:</h5>
+      <table class="table table-striped">
+        <thead>
+          <tr>
+            <th>Usuário</th>
+            <th style="width: 150px;">Ações</th>
+          </tr>
+        </thead>
+        <tbody id="tabela-admin">
+          {% for usuario in usuarios_admin %}
+          <tr id="admin-{{ usuario }}">
+            <td>{{ usuario }}</td>
+            <td>
+              <button type="button" class="btn btn-danger btn-sm" onclick="removerUsuarioAdmin('{{ usuario }}')">🗑️ Remover</button>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Seção: Usuários com acesso ao botão Configuração -->
+  <div class="coe-section">
+    <h4 class="mb-3">🔧 Usuários com acesso ao botão Configuração</h4>
+    <p class="text-white mb-3">Estes usuários podem ver e acessar o botão "Configuração" no painel principal.</p>
+    
+    <div class="row g-2 mb-3">
+      <div class="col-md-6">
+        <label class="form-label">Nome do usuário</label>
+        <input type="text" id="usuario-config-input" class="form-control" placeholder="Ex: JOÃO.SANTOS" style="text-transform: uppercase;">
+      </div>
+      <div class="col-md-6 d-flex align-items-end">
+        <button type="button" class="btn btn-primary me-2" onclick="adicionarUsuarioConfig()">➕ Adicionar</button>
+      </div>
+    </div>
+
+    <div class="table-container">
+      <h5 class="mb-3">Usuários cadastrados:</h5>
+      <table class="table table-striped">
+        <thead>
+          <tr>
+            <th>Usuário</th>
+            <th style="width: 150px;">Ações</th>
+          </tr>
+        </thead>
+        <tbody id="tabela-config">
+          {% for usuario in usuarios_config %}
+          <tr id="config-{{ usuario }}">
+            <td>{{ usuario }}</td>
+            <td>
+              <button type="button" class="btn btn-danger btn-sm" onclick="removerUsuarioConfig('{{ usuario }}')">🗑️ Remover</button>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+  // Auto-dismiss alerts after 5 seconds
+  setTimeout(function() {
+    const alerts = document.querySelectorAll('.alert');
+    alerts.forEach(function(alert) {
+      if (typeof bootstrap !== 'undefined') {
+        const bsAlert = new bootstrap.Alert(alert);
+        bsAlert.close();
+      } else {
+        alert.style.display = 'none';
+      }
+    });
+  }, 5000);
+
+  function adicionarUsuarioAdmin() {
+    const input = document.getElementById('usuario-admin-input');
+    const usuario = input.value.trim().toUpperCase();
+    
+    if (!usuario) {
+      alert('Por favor, digite o nome do usuário');
+      return;
+    }
+    
+    const formData = new FormData();
+    formData.append('acao', 'adicionar');
+    formData.append('usuario', usuario);
+    
+    fetch('{% url "gerenciar_usuarios_admin" %}', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        'X-CSRFToken': '{{ csrf_token }}'
+      }
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        // Adicionar linha na tabela
+        const tbody = document.getElementById('tabela-admin');
+        const tr = document.createElement('tr');
+        tr.id = `admin-${usuario}`;
+        tr.innerHTML = `
+          <td>${usuario}</td>
+          <td>
+            <button type="button" class="btn btn-danger btn-sm" onclick="removerUsuarioAdmin('${usuario}')">🗑️ Remover</button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+        input.value = '';
+        location.reload(); // Recarregar para mostrar mensagem de sucesso
+      } else {
+        alert('Erro: ' + data.message);
+      }
+    })
+    .catch(error => {
+      console.error('Erro:', error);
+      alert('Erro ao adicionar usuário');
+    });
+  }
+
+  function removerUsuarioAdmin(usuario) {
+    if (!confirm(`Tem certeza que deseja remover o usuário ${usuario}?`)) {
+      return;
+    }
+    
+    const formData = new FormData();
+    formData.append('acao', 'remover');
+    formData.append('usuario', usuario);
+    
+    fetch('{% url "gerenciar_usuarios_admin" %}', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        'X-CSRFToken': '{{ csrf_token }}'
+      }
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        // Remover linha da tabela
+        const tr = document.getElementById(`admin-${usuario}`);
+        if (tr) {
+          tr.remove();
+        }
+        location.reload(); // Recarregar para mostrar mensagem de sucesso
+      } else {
+        alert('Erro: ' + data.message);
+      }
+    })
+    .catch(error => {
+      console.error('Erro:', error);
+      alert('Erro ao remover usuário');
+    });
+  }
+
+  function adicionarUsuarioConfig() {
+    const input = document.getElementById('usuario-config-input');
+    const usuario = input.value.trim().toUpperCase();
+    
+    if (!usuario) {
+      alert('Por favor, digite o nome do usuário');
+      return;
+    }
+    
+    const formData = new FormData();
+    formData.append('acao', 'adicionar');
+    formData.append('usuario', usuario);
+    
+    fetch('{% url "gerenciar_usuarios_config" %}', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        'X-CSRFToken': '{{ csrf_token }}'
+      }
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        // Adicionar linha na tabela
+        const tbody = document.getElementById('tabela-config');
+        const tr = document.createElement('tr');
+        tr.id = `config-${usuario}`;
+        tr.innerHTML = `
+          <td>${usuario}</td>
+          <td>
+            <button type="button" class="btn btn-danger btn-sm" onclick="removerUsuarioConfig('${usuario}')">🗑️ Remover</button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+        input.value = '';
+        location.reload(); // Recarregar para mostrar mensagem de sucesso
+      } else {
+        alert('Erro: ' + data.message);
+      }
+    })
+    .catch(error => {
+      console.error('Erro:', error);
+      alert('Erro ao adicionar usuário');
+    });
+  }
+
+  function removerUsuarioConfig(usuario) {
+    if (!confirm(`Tem certeza que deseja remover o usuário ${usuario}?`)) {
+      return;
+    }
+    
+    const formData = new FormData();
+    formData.append('acao', 'remover');
+    formData.append('usuario', usuario);
+    
+    fetch('{% url "gerenciar_usuarios_config" %}', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        'X-CSRFToken': '{{ csrf_token }}'
+      }
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        // Remover linha da tabela
+        const tr = document.getElementById(`config-${usuario}`);
+        if (tr) {
+          tr.remove();
+        }
+        location.reload(); // Recarregar para mostrar mensagem de sucesso
+      } else {
+        alert('Erro: ' + data.message);
+      }
+    })
+    .catch(error => {
+      console.error('Erro:', error);
+      alert('Erro ao remover usuário');
+    });
+  }
+
+  // Permitir Enter nos inputs
+  document.getElementById('usuario-admin-input').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+      adicionarUsuarioAdmin();
+    }
+  });
+
+  document.getElementById('usuario-config-input').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+      adicionarUsuarioConfig();
+    }
+  });
+</script>
+</body>
+</html>
+

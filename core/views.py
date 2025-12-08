@@ -8,6 +8,7 @@ import logging
 import json
 from datetime import datetime
 import os
+from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
@@ -107,6 +108,7 @@ def login_view(request):
             token_data = gerar_token(username, password)
             if 'access_token' in token_data:
                 request.session['token'] = token_data['access_token']
+                request.session['username'] = username.upper()  # Armazenar username em maiúsculas
                 return redirect('painel')
             else:
                 # Erro de autenticação da API
@@ -313,6 +315,11 @@ def painel_view(request):
             logger.exception("❌ Erro na requisição ao endpoint /centro_resultado_bi")
             
 
+    # Verificar permissões do usuário
+    username = request.session.get('username', '')
+    pode_gerenciar_usuarios = usuario_pode_gerenciar_usuarios(username)
+    tem_acesso_configuracao = usuario_tem_acesso_configuracao(username)
+    
     return render(request, 'painel.html', {
         'empresas': empresas,
         'centros': centros,
@@ -324,6 +331,8 @@ def painel_view(request):
         'agrupar_por_centro': agrupar_por_centro if 'agrupar_por_centro' in locals() else False,
         'meses': meses_lista,
         'ano_atual': ano_atual,
+        'pode_gerenciar_usuarios': pode_gerenciar_usuarios,
+        'tem_acesso_configuracao': tem_acesso_configuracao,
     })
 
 # Agrupamento dos dados por conta e mês com totalizadores por centro de resultados
@@ -842,3 +851,166 @@ def testar_conexao(request):
         'success': False,
         'message': 'Método não permitido'
     }, status=405)
+
+# ==================== GERENCIAMENTO DE USUÁRIOS ====================
+
+# Caminho do arquivo JSON para armazenar configurações de usuários
+USUARIOS_JSON_PATH = os.path.join(settings.BASE_DIR, 'usuarios_config.json')
+
+def get_usuarios_config():
+    """Lê as configurações de usuários do arquivo JSON"""
+    try:
+        if os.path.exists(USUARIOS_JSON_PATH):
+            with open(USUARIOS_JSON_PATH, 'r', encoding='utf-8') as f:
+                return json.load(f)
+    except Exception as e:
+        logger.error(f"❌ Erro ao ler configurações de usuários: {str(e)}")
+    
+    # Retorna estrutura padrão se não existir ou houver erro
+    return {
+        'usuarios_admin': ['ANDERSON.SANTOS'],  # Usuários que podem gerenciar usuários
+        'usuarios_config': []  # Usuários que têm acesso ao botão Configuração
+    }
+
+def save_usuarios_config(config_data):
+    """Salva as configurações de usuários no arquivo JSON"""
+    try:
+        with open(USUARIOS_JSON_PATH, 'w', encoding='utf-8') as f:
+            json.dump(config_data, f, indent=2, ensure_ascii=False)
+        return True
+    except Exception as e:
+        logger.error(f"❌ Erro ao salvar configurações de usuários: {str(e)}")
+        return False
+
+def usuario_pode_gerenciar_usuarios(username):
+    """Verifica se o usuário pode gerenciar outros usuários"""
+    if not username:
+        return False
+    config_data = get_usuarios_config()
+    usuarios_admin = [u.upper() for u in config_data.get('usuarios_admin', [])]
+    return username.upper() in usuarios_admin
+
+def usuario_tem_acesso_configuracao(username):
+    """Verifica se o usuário tem acesso ao botão de Configuração"""
+    if not username:
+        return False
+    config_data = get_usuarios_config()
+    usuarios_config = [u.upper() for u in config_data.get('usuarios_config', [])]
+    return username.upper() in usuarios_config
+
+# View para tela de configuração de usuários
+@token_required
+def configuracao_usuarios_view(request):
+    """Tela para gerenciar usuários (apenas para admins)"""
+    username = request.session.get('username', '')
+    
+    # Verificar se o usuário tem permissão para acessar esta tela
+    if not usuario_pode_gerenciar_usuarios(username):
+        return redirect('painel')
+    
+    config_data = get_usuarios_config()
+    usuarios_admin = config_data.get('usuarios_admin', [])
+    usuarios_config = config_data.get('usuarios_config', [])
+    
+    # Buscar mensagens da sessão
+    success_message = request.session.pop('success_message', None)
+    error_message = request.session.pop('error_message', None)
+    
+    return render(request, 'configuracao_usuarios.html', {
+        'usuarios_admin': usuarios_admin,
+        'usuarios_config': usuarios_config,
+        'success_message': success_message,
+        'error_message': error_message
+    })
+
+# View para adicionar/remover usuários admin
+@token_required
+def gerenciar_usuarios_admin(request):
+    """Adiciona ou remove usuários que podem gerenciar outros usuários"""
+    username = request.session.get('username', '')
+    
+    if not usuario_pode_gerenciar_usuarios(username):
+        return JsonResponse({'success': False, 'message': 'Acesso negado'}, status=403)
+    
+    if request.method == 'POST':
+        acao = request.POST.get('acao')  # 'adicionar' ou 'remover'
+        usuario = request.POST.get('usuario', '').strip().upper()
+        
+        if not usuario:
+            return JsonResponse({'success': False, 'message': 'Nome do usuário é obrigatório'})
+        
+        config_data = get_usuarios_config()
+        usuarios_admin = config_data.get('usuarios_admin', [])
+        usuarios_admin_upper = [u.upper() for u in usuarios_admin]
+        
+        if acao == 'adicionar':
+            if usuario not in usuarios_admin_upper:
+                usuarios_admin.append(usuario)
+                config_data['usuarios_admin'] = usuarios_admin
+                if save_usuarios_config(config_data):
+                    request.session['success_message'] = f'Usuário {usuario} adicionado com sucesso!'
+                    return JsonResponse({'success': True, 'message': 'Usuário adicionado com sucesso'})
+                else:
+                    return JsonResponse({'success': False, 'message': 'Erro ao salvar configuração'})
+            else:
+                return JsonResponse({'success': False, 'message': 'Usuário já existe na lista'})
+        
+        elif acao == 'remover':
+            if usuario in usuarios_admin_upper:
+                usuarios_admin = [u for u in usuarios_admin if u.upper() != usuario]
+                config_data['usuarios_admin'] = usuarios_admin
+                if save_usuarios_config(config_data):
+                    request.session['success_message'] = f'Usuário {usuario} removido com sucesso!'
+                    return JsonResponse({'success': True, 'message': 'Usuário removido com sucesso'})
+                else:
+                    return JsonResponse({'success': False, 'message': 'Erro ao salvar configuração'})
+            else:
+                return JsonResponse({'success': False, 'message': 'Usuário não encontrado na lista'})
+    
+    return JsonResponse({'success': False, 'message': 'Método não permitido'}, status=405)
+
+# View para adicionar/remover usuários com acesso à configuração
+@token_required
+def gerenciar_usuarios_config(request):
+    """Adiciona ou remove usuários que têm acesso ao botão de Configuração"""
+    username = request.session.get('username', '')
+    
+    if not usuario_pode_gerenciar_usuarios(username):
+        return JsonResponse({'success': False, 'message': 'Acesso negado'}, status=403)
+    
+    if request.method == 'POST':
+        acao = request.POST.get('acao')  # 'adicionar' ou 'remover'
+        usuario = request.POST.get('usuario', '').strip().upper()
+        
+        if not usuario:
+            return JsonResponse({'success': False, 'message': 'Nome do usuário é obrigatório'})
+        
+        config_data = get_usuarios_config()
+        usuarios_config = config_data.get('usuarios_config', [])
+        usuarios_config_upper = [u.upper() for u in usuarios_config]
+        
+        if acao == 'adicionar':
+            if usuario not in usuarios_config_upper:
+                usuarios_config.append(usuario)
+                config_data['usuarios_config'] = usuarios_config
+                if save_usuarios_config(config_data):
+                    request.session['success_message'] = f'Usuário {usuario} adicionado com sucesso!'
+                    return JsonResponse({'success': True, 'message': 'Usuário adicionado com sucesso'})
+                else:
+                    return JsonResponse({'success': False, 'message': 'Erro ao salvar configuração'})
+            else:
+                return JsonResponse({'success': False, 'message': 'Usuário já existe na lista'})
+        
+        elif acao == 'remover':
+            if usuario in usuarios_config_upper:
+                usuarios_config = [u for u in usuarios_config if u.upper() != usuario]
+                config_data['usuarios_config'] = usuarios_config
+                if save_usuarios_config(config_data):
+                    request.session['success_message'] = f'Usuário {usuario} removido com sucesso!'
+                    return JsonResponse({'success': True, 'message': 'Usuário removido com sucesso'})
+                else:
+                    return JsonResponse({'success': False, 'message': 'Erro ao salvar configuração'})
+            else:
+                return JsonResponse({'success': False, 'message': 'Usuário não encontrado na lista'})
+    
+    return JsonResponse({'success': False, 'message': 'Método não permitido'}, status=405)

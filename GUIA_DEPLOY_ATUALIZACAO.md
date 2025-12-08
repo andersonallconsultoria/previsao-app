@@ -1,362 +1,352 @@
-# 🚀 Guia Passo a Passo - Atualizar e Deploy no AWS
+# 📋 Guia Completo de Deploy - Atualização para AWS EC2
 
-## 📋 Visão Geral do Processo
-
-1. ✅ **Local**: Commit e push das alterações para GitHub
-2. ⏳ **GitHub Actions**: Build automático da imagem Docker e push para Docker Hub
-3. 🖥️ **AWS EC2**: Pull da nova imagem e reiniciar containers
+Este guia detalha o processo completo para atualizar a aplicação no servidor AWS EC2 após fazer alterações no código.
 
 ---
 
-## 📝 PASSO 1: Preparar e Enviar Alterações (Local)
+## 🔄 **PASSO 1: Preparar e Enviar Código para o Git**
 
-### 1.1 Verificar alterações
-```bash
-# Ver o que foi alterado
+### 1.1. No seu computador local (Windows)
+
+Abra o PowerShell ou Terminal e navegue até a pasta do projeto:
+
+```powershell
+cd "D:\Projetos Python GIT\previsao_app"
+```
+
+### 1.2. Verificar o status do Git
+
+```powershell
 git status
-
-# Ver as diferenças
-git diff
 ```
 
-### 1.2 Adicionar arquivos alterados
-```bash
-# Adicionar todos os arquivos modificados
+Isso mostrará todos os arquivos modificados/criados.
+
+### 1.3. Adicionar todas as alterações
+
+```powershell
 git add .
-
-# OU adicionar arquivos específicos
-git add core/views.py
 ```
 
-### 1.3 Fazer commit
-```bash
-# Commit com mensagem descritiva
-git commit -m "feat: adicionar limit:1000 na busca de contas contábeis"
+### 1.4. Fazer commit das alterações
+
+```powershell
+git commit -m "Implementação de controle de acesso por usuários - Configuração de Usuários"
 ```
 
-### 1.4 Enviar para GitHub
-```bash
-# Push para o repositório
+### 1.5. Enviar para o GitHub
+
+```powershell
 git push origin main
 ```
 
-**✅ Após o push, o GitHub Actions iniciará automaticamente o build da imagem Docker!**
+**Aguarde alguns segundos** para o push ser concluído.
 
 ---
 
-## ⏳ PASSO 2: Aguardar Build no GitHub Actions
+## 🚀 **PASSO 2: Verificar GitHub Actions (Build Automático)**
 
-### 2.1 Verificar o progresso do build
+### 2.1. Acessar o GitHub
 
-1. Acesse seu repositório no GitHub
-2. Clique na aba **"Actions"**
-3. Verifique o workflow em execução
-4. Aguarde até ver: **✅ Build completed successfully**
+1. Abra seu navegador e acesse: `https://github.com/SEU_USUARIO/SEU_REPOSITORIO`
+2. Clique na aba **"Actions"** (no topo do repositório)
 
-**⏱️ Tempo estimado: 5-10 minutos**
+### 2.2. Verificar o workflow
 
-### 2.2 Verificar se a imagem foi enviada para Docker Hub
+- Você verá um workflow rodando (ou já concluído) com o nome do seu commit
+- Aguarde até que o status fique **verde** (✓) com a mensagem "Build and push Docker image"
+- Isso significa que a nova imagem Docker foi construída e enviada para o Docker Hub
 
-1. Acesse [Docker Hub](https://hub.docker.com/)
-2. Entre na sua conta
-3. Verifique se a imagem `andersonall/previsao-app:latest` foi atualizada
-4. Confirme a data/hora da última atualização
-
-**✅ Quando a imagem aparecer atualizada no Docker Hub, pode prosseguir!**
+**⏱️ Tempo estimado:** 2-5 minutos
 
 ---
 
-## 🖥️ PASSO 3: Conectar ao Servidor AWS EC2
+## 🖥️ **PASSO 3: Conectar ao Servidor AWS EC2**
 
-### 3.1 Conectar via SSH
+### 3.1. Conectar via SSH
 
-**Windows (PowerShell ou CMD):**
-```bash
-ssh -i "caminho/para/sua-chave.pem" ubuntu@SEU-IP-EC2
+No PowerShell ou Terminal (no seu computador local):
+
+```powershell
+ssh -i "caminho/para/sua-chave.pem" ubuntu@SEU_IP_EC2
 ```
 
 **Exemplo:**
-```bash
+```powershell
 ssh -i "C:\Users\SeuUsuario\Downloads\minha-chave.pem" ubuntu@18.117.242.206
 ```
 
-**Linux/Mac:**
-```bash
-ssh -i ~/sua-chave.pem ubuntu@SEU-IP-EC2
-```
-
-### 3.2 Verificar conexão
-```bash
-# Deve aparecer algo como:
-# ubuntu@ip-172-31-XX-XX:~$
-```
+**Nota:** Substitua `SEU_IP_EC2` pelo IP público da sua instância EC2.
 
 ---
 
-## 📦 PASSO 4: Atualizar Aplicação no Servidor AWS
+## 📂 **PASSO 4: Navegar até a Pasta da Aplicação**
 
-### 4.1 Navegar para o diretório da aplicação
+Após conectar ao servidor, execute:
+
 ```bash
 cd ~/previsao-app
 ```
 
-**OU se estiver em outro diretório:**
-```bash
-# Encontrar o diretório
-find ~ -name "docker-compose.yml" -type f 2>/dev/null
+Verifique se está na pasta correta:
 
-# Depois navegar até ele
-cd /caminho/encontrado
+```bash
+pwd
 ```
 
-### 4.2 Verificar containers em execução
-```bash
-# Ver status atual
-docker-compose ps
+Deve mostrar: `/home/ubuntu/previsao-app`
 
-# Deve mostrar algo como:
-# NAME                    IMAGE                          STATUS
-# previsao-app-web-1      andersonall/previsao-app:latest Up X minutes
-```
+---
 
-### 4.3 Parar containers (sem perder dados)
+## 🔄 **PASSO 5: Parar os Containers Atuais**
+
 ```bash
-# Parar containers graciosamente
 docker-compose down
-
-# OU se usar docker-compose.prod.yml:
-docker-compose -f docker-compose.prod.yml down
 ```
 
-### 4.4 Atualizar imagem Docker do Docker Hub
-```bash
-# Fazer pull da nova imagem
-docker-compose pull
+Isso irá parar e remover os containers atuais (mas **não** remove as imagens nem os volumes).
 
-# OU se usar docker-compose.prod.yml:
-docker-compose -f docker-compose.prod.yml pull
-```
-
-**⏱️ Isso pode levar alguns minutos dependendo do tamanho da imagem**
-
-### 4.5 Verificar se a imagem foi atualizada
-```bash
-# Ver imagens locais
-docker images | grep previsao-app
-
-# Verificar a data/hora da imagem
-docker images andersonall/previsao-app:latest
-```
-
-### 4.6 Reiniciar containers com a nova imagem
-```bash
-# Subir containers com a nova imagem
-docker-compose up -d
-
-# OU se usar docker-compose.prod.yml:
-docker-compose -f docker-compose.prod.yml up -d
-```
-
-### 4.7 Verificar se está rodando corretamente
-```bash
-# Ver status dos containers
-docker-compose ps
-
-# Deve mostrar STATUS: Up X seconds (healthy)
-```
-
-### 4.8 Verificar logs (opcional, mas recomendado)
-```bash
-# Ver logs em tempo real
-docker-compose logs -f
-
-# OU ver apenas os últimos logs
-docker-compose logs --tail=50
-
-# Para sair dos logs, pressione: Ctrl + C
-```
+**Aguarde alguns segundos** até o comando terminar.
 
 ---
 
-## ✅ PASSO 5: Verificar se Está Funcionando
+## 📥 **PASSO 6: Baixar a Nova Imagem do Docker Hub**
 
-### 5.1 Testar aplicação localmente no servidor
 ```bash
-# Testar se responde
-curl http://localhost:8000/
-
-# Deve retornar HTML da página de login
-```
-
-### 5.2 Verificar health check
-```bash
-# Ver status detalhado
-docker-compose ps
-
-# Verificar se está "healthy"
-docker inspect previsao-app-web-1 | grep -A 5 Health
-```
-
-### 5.3 Testar no navegador
-1. Abra seu navegador
-2. Acesse: `http://SEU-IP-EC2:8000`
-3. Verifique se a aplicação carrega normalmente
-4. Teste fazer login e acessar a tela de Configuração
-5. Teste a busca de contas contábeis para verificar se o `limit:1000` está funcionando
-
----
-
-## 🔍 PASSO 6: Verificar se a Atualização Funcionou
-
-### 6.1 Verificar logs da aplicação
-```bash
-# Ver logs recentes procurando por "cadastro_contabil"
-docker-compose logs | grep cadastro_contabil
-
-# Deve mostrar algo como:
-# [INFO] Endpoint 'cadastro_contabil' - Página 1: X registros
-```
-
-### 6.2 Verificar se o limit está sendo enviado
-```bash
-# Ver logs detalhados
-docker-compose logs web | grep -i "limit\|page"
-
-# OU ver todos os logs
-docker-compose logs web
-```
-
-### 6.3 Testar funcionalidade
-1. Acesse a tela de **Configuração**
-2. Clique no campo **"Conta Contábil"**
-3. Digite para buscar
-4. Verifique se está funcionando corretamente
-
----
-
-## 🚨 Troubleshooting (Solução de Problemas)
-
-### Problema: "Error response from daemon: pull access denied"
-```bash
-# Fazer login no Docker Hub
-docker login
-
-# Digite seu username e password do Docker Hub
-```
-
-### Problema: Container não inicia
-```bash
-# Ver logs detalhados
-docker-compose logs
-
-# Verificar se há erros
-docker-compose logs | grep -i error
-```
-
-### Problema: Imagem não atualizou
-```bash
-# Forçar pull sem cache
-docker-compose pull --no-cache
-
-# Remover imagem antiga
-docker rmi andersonall/previsao-app:latest
-
-# Fazer pull novamente
 docker-compose pull
 ```
 
-### Problema: Porta 8000 já em uso
+Este comando baixa a versão mais recente da imagem do Docker Hub.
+
+**⏱️ Tempo estimado:** 1-3 minutos (dependendo do tamanho da imagem)
+
+Você verá mensagens como:
+```
+[+] Pulling 13/13
+✔ web 12 layers [⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿] 0B/0B Pulled 13.5s
+```
+
+---
+
+## 🚀 **PASSO 7: Iniciar os Containers com a Nova Imagem**
+
 ```bash
-# Verificar o que está usando a porta
-sudo netstat -tulpn | grep :8000
-
-# Parar containers
-docker-compose down
-
-# Subir novamente
 docker-compose up -d
 ```
 
-### Problema: Erro "no such table: django_session"
+O parâmetro `-d` faz com que os containers rodem em background (detached mode).
+
+**Aguarde alguns segundos** para os containers iniciarem.
+
+---
+
+## ✅ **PASSO 8: Verificar se os Containers Estão Rodando**
+
 ```bash
-# Executar migrações
+docker-compose ps
+```
+
+Você deve ver algo como:
+
+```
+NAME                    IMAGE                              STATUS
+previsao-app-web-1      andersonall/previsao-app:latest    Up X seconds (health: starting)
+```
+
+**Aguarde até que o STATUS mostre "Up" e "healthy"** (pode levar 10-30 segundos).
+
+---
+
+## 🗄️ **PASSO 9: Executar Migrações do Django (SE NECESSÁRIO)**
+
+**⚠️ IMPORTANTE:** Execute este passo **sempre** após atualizar a aplicação, especialmente se houver mudanças no banco de dados.
+
+### 9.1. Identificar o nome do container
+
+```bash
+docker-compose ps
+```
+
+Anote o nome do container (geralmente é `previsao-app-web-1` ou similar).
+
+### 9.2. Executar as migrações
+
+```bash
 docker exec previsao-app-web-1 python manage.py migrate
+```
 
-# Verificar se funcionou
-docker-compose logs | grep migrate
+**Nota:** Se o nome do container for diferente, substitua `previsao-app-web-1` pelo nome correto.
+
+Você verá mensagens como:
+```
+Operations to perform:
+  Apply all migrations: admin, auth, contenttypes, sessions
+Running migrations:
+  Applying sessions.0001_initial... OK
 ```
 
 ---
 
-## 📊 Comandos Úteis para Monitoramento
+## 📊 **PASSO 10: Verificar os Logs (Opcional, mas Recomendado)**
 
-### Ver status dos containers
+Para verificar se a aplicação está rodando sem erros:
+
 ```bash
-docker-compose ps
+docker-compose logs --tail=50
 ```
 
-### Ver uso de recursos
+Ou para ver os logs em tempo real:
+
 ```bash
-docker stats
+docker-compose logs -f
 ```
 
-### Ver logs em tempo real
-```bash
-docker-compose logs -f web
-```
+(Pressione `Ctrl+C` para sair)
 
-### Reiniciar apenas um container
-```bash
-docker-compose restart web
+Procure por mensagens de erro. Se tudo estiver OK, você verá:
 ```
-
-### Ver informações da imagem
-```bash
-docker inspect andersonall/previsao-app:latest
+[INFO] Starting gunicorn 21.2.0
+[INFO] Listening at: http://0.0.0.0:8000
+[INFO] Using worker: sync
 ```
 
 ---
 
-## ✅ Checklist Final
+## 🧪 **PASSO 11: Testar a Aplicação**
 
-Antes de considerar o deploy completo, verifique:
+### 11.1. No navegador
 
-- [ ] ✅ Alterações commitadas e enviadas para GitHub
-- [ ] ✅ GitHub Actions completou o build com sucesso
-- [ ] ✅ Imagem atualizada no Docker Hub
-- [ ] ✅ Conectado ao servidor AWS via SSH
-- [ ] ✅ Containers parados (`docker-compose down`)
-- [ ] ✅ Nova imagem baixada (`docker-compose pull`)
-- [ ] ✅ Containers reiniciados (`docker-compose up -d`)
-- [ ] ✅ Containers estão "Up" e "healthy"
-- [ ] ✅ Aplicação acessível no navegador
-- [ ] ✅ Funcionalidade testada e funcionando
-- [ ] ✅ Logs não mostram erros críticos
+Acesse: `http://SEU_IP_EC2:8000/`
+
+**Exemplo:** `http://18.117.242.206:8000/`
+
+### 11.2. Testar as funcionalidades
+
+1. **Login:**
+   - Faça login com suas credenciais
+   - Verifique se o username está sendo armazenado corretamente
+
+2. **Painel:**
+   - Verifique se o botão "Config. Usuários" aparece (se você for admin)
+   - Verifique se o botão "Configuração" aparece apenas se você tiver permissão
+
+3. **Configuração de Usuários:**
+   - Acesse "Config. Usuários" (se for admin)
+   - Teste adicionar um usuário em cada seção
+   - Teste remover um usuário
+   - Verifique se o arquivo `usuarios_config.json` está sendo criado
+
+4. **Controle de Acesso:**
+   - Faça logout
+   - Faça login com um usuário que **não** está na lista de configuração
+   - Verifique se o botão "Configuração" **não** aparece
+   - Verifique se o botão "Config. Usuários" **não** aparece
 
 ---
 
-## 🎯 Resumo Rápido (Comandos Essenciais)
+## 🔧 **TROUBLESHOOTING (Solução de Problemas)**
+
+### ❌ Erro: "no such table: django_session"
+
+**Solução:**
+```bash
+docker exec previsao-app-web-1 python manage.py migrate
+```
+
+### ❌ Erro: "Invalid HTTP_HOST header"
+
+**Solução:**
+1. Edite o arquivo `.env`:
+   ```bash
+   nano ~/previsao-app/.env
+   ```
+2. Adicione o IP público no `ALLOWED_HOSTS`:
+   ```
+   ALLOWED_HOSTS=127.0.0.1,localhost,SEU_IP_PUBLICO
+   ```
+3. Reinicie os containers:
+   ```bash
+   docker-compose restart
+   ```
+
+### ❌ Container não inicia ou fica "unhealthy"
+
+**Solução:**
+1. Verifique os logs:
+   ```bash
+   docker-compose logs web
+   ```
+2. Verifique se a porta 8000 está livre:
+   ```bash
+   sudo netstat -tlnp | grep 8000
+   ```
+3. Se necessário, recrie os containers:
+   ```bash
+   docker-compose down
+   docker-compose up -d
+   ```
+
+### ❌ Arquivo `usuarios_config.json` não está sendo criado
+
+**Solução:**
+1. Verifique as permissões da pasta:
+   ```bash
+   ls -la ~/previsao-app/
+   ```
+2. O arquivo será criado automaticamente na primeira execução. Se não aparecer, verifique os logs:
+   ```bash
+   docker-compose logs web | grep usuarios
+   ```
+
+---
+
+## 📝 **CHECKLIST FINAL**
+
+Antes de considerar o deploy concluído, verifique:
+
+- [ ] Código commitado e enviado para o GitHub
+- [ ] GitHub Actions concluído com sucesso (verde)
+- [ ] Nova imagem baixada no servidor (`docker-compose pull`)
+- [ ] Containers rodando (`docker-compose ps` mostra "Up" e "healthy")
+- [ ] Migrações executadas (`python manage.py migrate`)
+- [ ] Aplicação acessível no navegador
+- [ ] Login funcionando
+- [ ] Botões aparecem/desaparecem conforme permissões
+- [ ] Configuração de usuários funcionando
+- [ ] Arquivo `usuarios_config.json` sendo criado/atualizado
+
+---
+
+## 🎯 **RESUMO RÁPIDO (Comandos Essenciais)**
 
 ```bash
-# 1. Local - Commit e Push
+# 1. No seu PC (Windows)
+cd "D:\Projetos Python GIT\previsao_app"
 git add .
-git commit -m "sua mensagem"
+git commit -m "Implementação de controle de acesso por usuários"
 git push origin main
 
-# 2. Aguardar GitHub Actions (5-10 min)
+# 2. Aguardar GitHub Actions (2-5 minutos)
 
-# 3. AWS EC2 - Atualizar
+# 3. No servidor AWS (via SSH)
 cd ~/previsao-app
 docker-compose down
 docker-compose pull
 docker-compose up -d
-docker-compose ps
-docker-compose logs -f
+docker exec previsao-app-web-1 python manage.py migrate
+docker-compose logs --tail=50
 ```
 
 ---
 
-**🎉 Pronto! Sua aplicação está atualizada e rodando no AWS!**
+## 📞 **SUPORTE**
 
+Se encontrar algum problema não listado aqui, verifique:
+1. Os logs do container: `docker-compose logs web`
+2. O status dos containers: `docker-compose ps`
+3. As permissões dos arquivos: `ls -la ~/previsao-app/`
 
+---
 
+**Última atualização:** 2025-01-XX
+**Versão do guia:** 2.0

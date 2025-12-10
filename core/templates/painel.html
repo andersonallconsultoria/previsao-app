@@ -359,12 +359,18 @@
     </div>
   </div>
 
+  {% if sem_centros_permitidos %}
+    <div class="alert alert-danger">
+      {{ mensagem_bloqueio|default:"Usuário não tem centro de resultados relacionado. Contate o administrador." }}
+    </div>
+  {% endif %}
+
   <form method="post" class="filtros-section">
     {% csrf_token %}
     <div class="row g-2 align-items-end">
       <div class="col-md-2">
         <label class="form-label small mb-1">Empresa</label>
-        <select name="empresa" class="form-select form-select-sm">
+        <select name="empresa" class="form-select form-select-sm" {% if sem_centros_permitidos %}disabled{% endif %}>
           <option value="">Todas</option>
           {% for emp in empresas %}
             <option value="{{ emp.idempresa }}" {% if request.POST.empresa == emp.idempresa|stringformat:"s" %}selected{% endif %}>{{ emp.empresa }}</option>
@@ -374,21 +380,31 @@
       <div class="col-md-3">
         <label class="form-label small mb-1">Centro de Resultado</label>
         <div class="autocomplete-wrapper">
-          <input type="text" id="centro-search" class="form-control form-control-sm" placeholder="Digite para pesquisar centros..." autocomplete="off">
-          <select name="centro" class="form-select form-select-sm" id="centro-select" style="display: none;">
-          <option value="">Todos</option>
+          <input type="text" id="centro-search" class="form-control form-control-sm" placeholder="Digite para pesquisar centros..." autocomplete="off" {% if sem_centros_permitidos %}disabled{% endif %}>
+          <select name="centro" class="form-select form-select-sm" id="centro-select" style="display: none;" {% if sem_centros_permitidos %}disabled{% endif %}>
+          {% if tem_lista_permitida and centros|length > 1 %}
+            <option value="" selected>Selecione um centro</option>
+          {% elif not tem_lista_permitida %}
+            <option value="">Todos</option>
+          {% endif %}
           {% for cr in centros %}
-            <option value="{{ cr.idcentroresultado }}" {% if request.POST.centro == cr.idcentroresultado|stringformat:"s" %}selected{% endif %}>{{ cr.centroresultados }}</option>
+            <option value="{{ cr.idcentroresultado }}"
+              {% if request.POST.centro == cr.idcentroresultado|stringformat:"s" %}
+                selected
+              {% elif request.method != "POST" and centro_preselect_id and centro_preselect_id == cr.idcentroresultado %}
+                selected
+              {% endif %}
+            >{{ cr.centroresultados }}</option>
           {% endfor %}
         </select>
       </div>
       </div>
       <div class="col-md-1">
         <label class="form-label small mb-1">Ano</label>
-        <input type="number" name="ano" class="form-control form-control-sm" value="{{ request.POST.ano|default:ano_atual }}" required>
+        <input type="number" name="ano" class="form-control form-control-sm" value="{{ request.POST.ano|default:ano_atual }}" required {% if sem_centros_permitidos %}disabled{% endif %}>
       </div>
       <div class="col-md-2">
-        <button type="submit" class="btn btn-primary btn-sm">🔍 Pesquisar</button>
+        <button type="submit" class="btn btn-primary btn-sm" {% if sem_centros_permitidos %}disabled{% endif %}>🔍 Pesquisar</button>
         {% if tem_acesso_configuracao %}
         <a href="{% url 'configuracao' %}" class="btn btn-success btn-sm ms-1">🔧 Configuração</a>
         {% endif %}
@@ -583,6 +599,11 @@
     document.addEventListener('DOMContentLoaded', function() {
       const centroSelect = document.getElementById('centro-select');
       const centroSearch = document.getElementById('centro-search');
+
+      // Se o usuário não tem centros permitidos, não inicializa autocomplete
+      if (!centroSelect || centroSelect.disabled) {
+        return;
+      }
       
       // Criar container para autocomplete
       const container = centroSearch.parentElement;
@@ -596,7 +617,9 @@
       // Definir valor inicial do campo de pesquisa
       if (centroSelect.value) {
         const selectedOption = centroSelect.options[centroSelect.selectedIndex];
-        centroSearch.value = selectedOption.text;
+        if (selectedOption && selectedOption.text) {
+          centroSearch.value = selectedOption.text;
+        }
       }
       
       // Função para filtrar opções

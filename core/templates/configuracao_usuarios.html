@@ -202,6 +202,64 @@
       </table>
     </div>
   </div>
+
+  <!-- Seção: Vincular usuários a Centros de Resultado -->
+  <div class="coe-section">
+    <h4 class="mb-3">🏢 Usuários vinculados a Centros de Resultado</h4>
+    <p class="text-white mb-3">
+      Defina quais centros cada usuário pode acessar. Se um usuário não tiver nenhum centro vinculado, o acesso será bloqueado.
+    </p>
+
+    <div class="row g-2 mb-3">
+      <div class="col-md-4">
+        <label class="form-label">Nome do usuário</label>
+        <input type="text" id="usuario-centro-input" class="form-control" placeholder="Ex: JOÃO.SANTOS" style="text-transform: uppercase;">
+      </div>
+      <div class="col-md-8">
+        <label class="form-label">Centros de Resultado permitidos (multiseleção)</label>
+        <select id="centros-select" class="form-select" multiple size="8">
+          {% for centro in centros %}
+            <option value="{{ centro.idcentroresultado }}">{{ centro.centroresultados }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <div class="mb-3">
+      <button type="button" class="btn btn-primary me-2" onclick="salvarUsuarioCentros()">💾 Salvar vínculo</button>
+      <button type="button" class="btn btn-danger" onclick="limparUsuarioCentros()">🧹 Limpar vínculo (bloqueia acesso)</button>
+    </div>
+
+    <div class="table-container">
+      <h5 class="mb-3">Usuários e Centros vinculados:</h5>
+      <table class="table table-striped">
+        <thead>
+          <tr>
+            <th style="width: 25%;">Usuário</th>
+            <th>Centros permitidos</th>
+          </tr>
+        </thead>
+        <tbody id="tabela-centros">
+          {% for user, lista in usuarios_centros_nomes.items %}
+          <tr id="centros-{{ user }}">
+            <td>{{ user }}</td>
+            <td>
+              {% if lista and lista|length > 0 %}
+                {{ lista|join:", " }}
+              {% else %}
+                <span class="text-danger">Nenhum (acesso bloqueado)</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="2">Nenhum vínculo cadastrado ainda.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
@@ -393,7 +451,83 @@
       adicionarUsuarioConfig();
     }
   });
+
+  function salvarUsuarioCentros() {
+    const usuarioInput = document.getElementById('usuario-centro-input');
+    const select = document.getElementById('centros-select');
+    const usuario = usuarioInput.value.trim().toUpperCase();
+    const selecionados = Array.from(select.selectedOptions).map(o => o.value);
+
+    if (!usuario) {
+      alert('Por favor, digite o nome do usuário.');
+      return;
+    }
+    if (selecionados.length === 0) {
+      alert('Selecione ao menos um centro para salvar o vínculo.');
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('acao', 'salvar');
+    formData.append('usuario', usuario);
+    selecionados.forEach(c => formData.append('centros', c));
+
+    fetch('{% url "gerenciar_usuarios_centros" %}', {
+      method: 'POST',
+      body: formData,
+      headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.success) {
+        alert(data.message || 'Vínculo salvo.');
+        location.reload();
+      } else {
+        alert('Erro: ' + data.message);
+      }
+    })
+    .catch(err => {
+      console.error(err);
+      alert('Erro ao salvar vínculo.');
+    });
+  }
+
+  function limparUsuarioCentros() {
+    const usuarioInput = document.getElementById('usuario-centro-input');
+    const usuario = usuarioInput.value.trim().toUpperCase();
+    if (!usuario) {
+      alert('Por favor, digite o nome do usuário.');
+      return;
+    }
+    if (!confirm(`Limpar centros do usuário ${usuario}? Isso bloqueará o acesso.`)) {
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('acao', 'limpar');
+    formData.append('usuario', usuario);
+
+    fetch('{% url "gerenciar_usuarios_centros" %}', {
+      method: 'POST',
+      body: formData,
+      headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.success) {
+        alert(data.message || 'Vínculo limpo.');
+        location.reload();
+      } else {
+        alert('Erro: ' + data.message);
+      }
+    })
+    .catch(err => {
+      console.error(err);
+      alert('Erro ao limpar vínculo.');
+    });
+  }
 </script>
 </body>
 </html>
+
 

@@ -18,5 +18,6 @@ urlpatterns = [
     path('configuracao_usuarios/', views.configuracao_usuarios_view, name='configuracao_usuarios'),
     path('gerenciar_usuarios_admin/', views.gerenciar_usuarios_admin, name='gerenciar_usuarios_admin'),
     path('gerenciar_usuarios_config/', views.gerenciar_usuarios_config, name='gerenciar_usuarios_config'),
+    path('gerenciar_usuarios_centros/', views.gerenciar_usuarios_centros, name='gerenciar_usuarios_centros'),
 
 ]

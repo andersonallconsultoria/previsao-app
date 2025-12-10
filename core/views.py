@@ -154,6 +154,12 @@ def painel_view(request):
         'Content-Type': 'application/json'
     }
 
+    username = request.session.get('username', '')
+    centros_permitidos_ids = get_centros_permitidos(username)
+    sem_centros_permitidos = False
+    mensagem_bloqueio = None
+    tem_lista_permitida = bool(centros_permitidos_ids)
+
     ano_atual = datetime.now().year
 
     def post_api(endpoint):
@@ -170,14 +176,94 @@ def painel_view(request):
 
     empresas = post_api('cadastro_empresa')
     centros = post_api('cadastro_centroresultados')
+    centro_preselect_id = None
+    # Filtrar centros conforme permissões do usuário
+    if centros_permitidos_ids:
+        centros = [
+            c for c in centros
+            if str(c.get('idcentroresultado')) and int(c.get('idcentroresultado')) in centros_permitidos_ids
+        ]
+        if len(centros) == 1:
+            try:
+                centro_preselect_id = int(centros[0].get('idcentroresultado'))
+            except Exception:
+                centro_preselect_id = None
+    else:
+        # Opção B: bloquear acesso se não houver centros vinculados
+        sem_centros_permitidos = True
+        mensagem_bloqueio = "Usuário não tem centro de resultados relacionado. Contate o administrador."
+        centros = []
+
     resultados = []
     agrupado = {}
     meses_lista = [(f"{i:02d}", f"{i:02d}") for i in range(1, 13)]
 
     if request.method == 'POST':
+        # Bloqueado: não processa pesquisa
+        if sem_centros_permitidos:
+            return render(request, 'painel.html', {
+                'empresas': empresas,
+                'centros': centros,
+                'resultados': resultados,
+                'agrupado': {},
+                'agrupado_por_centro': {},
+                'totalizadores_centro': {},
+                'totais_anuais_conta': {},
+                'agrupar_por_centro': False,
+                'meses': meses_lista,
+                'ano_atual': ano_atual,
+                'pode_gerenciar_usuarios': usuario_pode_gerenciar_usuarios(username),
+                'tem_acesso_configuracao': usuario_tem_acesso_configuracao(username),
+                'sem_centros_permitidos': sem_centros_permitidos,
+                'mensagem_bloqueio': mensagem_bloqueio,
+                'tem_lista_permitida': tem_lista_permitida,
+                'tem_lista_permitida': tem_lista_permitida,
+            })
+
         ano = int(request.POST.get("ano", 2025))
         empresa = request.POST.get("empresa") or None
         centro = request.POST.get("centro") or None
+
+        # Validar se o centro solicitado é permitido
+        if tem_lista_permitida and not centro:
+            mensagem_bloqueio = "Selecione um centro de resultado permitido para continuar."
+            return render(request, 'painel.html', {
+                'empresas': empresas,
+                'centros': centros,
+                'resultados': resultados,
+                'agrupado': {},
+                'agrupado_por_centro': {},
+                'totalizadores_centro': {},
+                'totais_anuais_conta': {},
+                'agrupar_por_centro': False,
+                'meses': meses_lista,
+                'ano_atual': ano_atual,
+                'pode_gerenciar_usuarios': usuario_pode_gerenciar_usuarios(username),
+                'tem_acesso_configuracao': usuario_tem_acesso_configuracao(username),
+                'sem_centros_permitidos': sem_centros_permitidos,
+                'mensagem_bloqueio': mensagem_bloqueio,
+                'tem_lista_permitida': tem_lista_permitida,
+            })
+
+        if centro and centros_permitidos_ids and int(centro) not in centros_permitidos_ids:
+            mensagem_bloqueio = "Você não tem permissão para acessar este centro de resultado."
+            return render(request, 'painel.html', {
+                'empresas': empresas,
+                'centros': centros,
+                'resultados': resultados,
+                'agrupado': {},
+                'agrupado_por_centro': {},
+                'totalizadores_centro': {},
+                'totais_anuais_conta': {},
+                'agrupar_por_centro': False,
+                'meses': meses_lista,
+                'ano_atual': ano_atual,
+                'pode_gerenciar_usuarios': usuario_pode_gerenciar_usuarios(username),
+                'tem_acesso_configuracao': usuario_tem_acesso_configuracao(username),
+                'sem_centros_permitidos': sem_centros_permitidos,
+                'mensagem_bloqueio': mensagem_bloqueio,
+                'tem_lista_permitida': tem_lista_permitida,
+            })
 
         logger.info(f"🔎 Filtros aplicados: ano={ano}, empresa={empresa}, centro={centro}")
 
@@ -316,7 +402,6 @@ def painel_view(request):
             
 
     # Verificar permissões do usuário
-    username = request.session.get('username', '')
     pode_gerenciar_usuarios = usuario_pode_gerenciar_usuarios(username)
     tem_acesso_configuracao = usuario_tem_acesso_configuracao(username)
     
@@ -333,6 +418,10 @@ def painel_view(request):
         'ano_atual': ano_atual,
         'pode_gerenciar_usuarios': pode_gerenciar_usuarios,
         'tem_acesso_configuracao': tem_acesso_configuracao,
+        'sem_centros_permitidos': sem_centros_permitidos,
+        'mensagem_bloqueio': mensagem_bloqueio,
+        'tem_lista_permitida': tem_lista_permitida,
+        'centro_preselect_id': centro_preselect_id,
     })
 
 # Agrupamento dos dados por conta e mês com totalizadores por centro de resultados
@@ -869,7 +958,8 @@ def get_usuarios_config():
     # Retorna estrutura padrão se não existir ou houver erro
     return {
         'usuarios_admin': ['ANDERSON.SANTOS'],  # Usuários que podem gerenciar usuários
-        'usuarios_config': []  # Usuários que têm acesso ao botão Configuração
+        'usuarios_config': [],  # Usuários que têm acesso ao botão Configuração
+        'usuarios_centros': {}  # Mapeamento usuário -> lista de centros permitidos
     }
 
 def save_usuarios_config(config_data):
@@ -898,6 +988,22 @@ def usuario_tem_acesso_configuracao(username):
     usuarios_config = [u.upper() for u in config_data.get('usuarios_config', [])]
     return username.upper() in usuarios_config
 
+def get_centros_permitidos(username):
+    """Retorna lista de IDs de centros permitidos para o usuário"""
+    if not username:
+        return []
+    config_data = get_usuarios_config()
+    mapping = config_data.get('usuarios_centros', {}) or {}
+    centros = mapping.get(username.upper(), [])
+    # Garantir ints
+    centros_int = []
+    for c in centros:
+        try:
+            centros_int.append(int(c))
+        except Exception:
+            continue
+    return centros_int
+
 # View para tela de configuração de usuários
 @token_required
 def configuracao_usuarios_view(request):
@@ -908,9 +1014,40 @@ def configuracao_usuarios_view(request):
     if not usuario_pode_gerenciar_usuarios(username):
         return redirect('painel')
     
+    # Buscar centros de resultados para permitir vinculação
+    token = request.session.get('token')
+    centros = []
+    if token:
+        headers = {
+            'Authorization': f"Bearer {token}",
+            'Content-Type': 'application/json'
+        }
+        centros_map = {}
+        try:
+            url = f"{get_dynamic_config('API_BASE_URL')}/cisspoder-service/cadastro_centroresultados"
+            resp = requests.post(url, json={"limit": 1000, "page": 1}, headers=headers, timeout=10)
+            if resp.status_code == 200:
+                centros = resp.json().get("data", [])
+                for c in centros:
+                    try:
+                        centros_map[int(c.get("idcentroresultado"))] = c.get("centroresultados")
+                    except Exception:
+                        continue
+            else:
+                logger.warning(f"⚠️ cadastro_centroresultados retornou {resp.status_code}")
+        except Exception:
+            logger.exception("❌ Erro ao buscar centros de resultados para configuração de usuários")
+    else:
+        centros_map = {}
+    
     config_data = get_usuarios_config()
     usuarios_admin = config_data.get('usuarios_admin', [])
     usuarios_config = config_data.get('usuarios_config', [])
+    usuarios_centros = config_data.get('usuarios_centros', {})
+    usuarios_centros_nomes = {
+        user: [centros_map.get(int(cid), str(cid)) for cid in (centros or [])]
+        for user, centros in usuarios_centros.items()
+    }
     
     # Buscar mensagens da sessão
     success_message = request.session.pop('success_message', None)
@@ -919,6 +1056,10 @@ def configuracao_usuarios_view(request):
     return render(request, 'configuracao_usuarios.html', {
         'usuarios_admin': usuarios_admin,
         'usuarios_config': usuarios_config,
+        'usuarios_centros': usuarios_centros,
+        'usuarios_centros_nomes': usuarios_centros_nomes,
+        'centros': centros,
+        'centros_map': centros_map,
         'success_message': success_message,
         'error_message': error_message
     })
@@ -1012,5 +1153,49 @@ def gerenciar_usuarios_config(request):
                     return JsonResponse({'success': False, 'message': 'Erro ao salvar configuração'})
             else:
                 return JsonResponse({'success': False, 'message': 'Usuário não encontrado na lista'})
+    
+    return JsonResponse({'success': False, 'message': 'Método não permitido'}, status=405)
+
+# View para gerenciar vínculo usuário -> centros
+@token_required
+def gerenciar_usuarios_centros(request):
+    """Define lista de centros de resultado permitidos para um usuário"""
+    username = request.session.get('username', '')
+    
+    if not usuario_pode_gerenciar_usuarios(username):
+        return JsonResponse({'success': False, 'message': 'Acesso negado'}, status=403)
+    
+    if request.method == 'POST':
+        usuario = request.POST.get('usuario', '').strip().upper()
+        acao = request.POST.get('acao', 'salvar')  # salvar ou limpar
+        centros_ids = request.POST.getlist('centros')  # lista de strings
+        
+        if not usuario:
+            return JsonResponse({'success': False, 'message': 'Nome do usuário é obrigatório'})
+        
+        config_data = get_usuarios_config()
+        usuarios_centros = config_data.get('usuarios_centros', {}) or {}
+        
+        if acao == 'limpar':
+            usuarios_centros[usuario] = []
+            config_data['usuarios_centros'] = usuarios_centros
+            if save_usuarios_config(config_data):
+                return JsonResponse({'success': True, 'message': f'Centros limpos para {usuario} (acesso bloqueado).'})
+            return JsonResponse({'success': False, 'message': 'Erro ao salvar configuração'})
+        
+        # salvar (substitui a lista)
+        centros_int = []
+        for cid in centros_ids:
+            try:
+                centros_int.append(int(cid))
+            except Exception:
+                continue
+        
+        usuarios_centros[usuario] = centros_int
+        config_data['usuarios_centros'] = usuarios_centros
+        
+        if save_usuarios_config(config_data):
+            return JsonResponse({'success': True, 'message': f'Centros atualizados para {usuario}'})
+        return JsonResponse({'success': False, 'message': 'Erro ao salvar configuração'})
     
     return JsonResponse({'success': False, 'message': 'Método não permitido'}, status=405)

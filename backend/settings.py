@@ -86,6 +86,7 @@ USE_TZ = True
 
 # Arquivos estáticos
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
 static_dir = os.path.join(BASE_DIR, 'core', 'static')
 STATICFILES_DIRS = [static_dir] if os.path.exists(static_dir) else []
 

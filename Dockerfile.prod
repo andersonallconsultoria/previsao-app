@@ -9,6 +9,7 @@ ENV DJANGO_SETTINGS_MODULE=backend.settings
 # Instalar dependências do sistema
 RUN apt-get update && apt-get install -y \
     gcc \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Diretório de trabalho

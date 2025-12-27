@@ -285,12 +285,13 @@ def painel_view(request):
                 logger.info(f"🏢 Empresa específica selecionada: {emp_int}")
             except ValueError:
                 logger.warning(f"⚠️ Empresa inválida: {empresa}")
-                # Se empresa inválida, enviar null
+                # Se empresa inválida, enviar null para buscar todas
                 payload["clausulas"].append({
                     "campo": "idempfiltro", "operadorlogico": "AND", "operador": "IGUAL", "valor": None
                 })
+                logger.info("🏢 Empresa inválida - enviando null (buscar todas)")
         else:
-            # Se empresa estiver vazia ou for "Todas", enviar null
+            # Se empresa estiver vazia ou for "Todas", enviar null com operador IGUAL
             payload["clausulas"].append({
                 "campo": "idempfiltro", "operadorlogico": "AND", "operador": "IGUAL", "valor": None
             })
@@ -366,13 +367,20 @@ def painel_view(request):
             request.session['resultados_debug'] = resultados
             logger.info(f"✅ Total final de registros: {len(resultados)}")
             log_json_pretty(resultados[:3], "📊 Primeiros resultados:")
-
-            resultado_agrupado = agrupar_resultados(resultados, agrupar_por_centro)
+            
+            # Verificar se "Todas" empresas foi selecionada (empresa vazia ou None)
+            agrupar_por_empresa = not (empresa and empresa.strip())
+            
+            if agrupar_por_empresa:
+                logger.info("🏢 'Todas' empresas selecionada - agrupando por empresa")
+            
+            resultado_agrupado = agrupar_resultados(resultados, agrupar_por_centro, agrupar_por_empresa)
                 
             if agrupar_por_centro:
                 agrupado_por_centro = resultado_agrupado['agrupado_por_centro']
                 totalizadores_centro = resultado_agrupado['totalizadores_centro']
                 agrupado = {}  # Não usado quando agrupado por centro
+                agrupado_por_empresa = {}  # Não usado quando agrupado por centro
                 
                 for centro, contas in agrupado_por_centro.items():
                     for conta, meses in contas.items():
@@ -382,11 +390,31 @@ def painel_view(request):
                 logger.info(f"📦 Total de centros agrupados: {len(agrupado_por_centro)}")
                 logger.info(f"📦 Totalizadores por centro: {len(totalizadores_centro)}")
                 log_json_pretty(list(agrupado_por_centro.keys())[:5], "🔑 Centros agrupados:")
+            elif agrupar_por_empresa:
+                agrupado_por_empresa = resultado_agrupado['agrupado_por_empresa']
+                totalizadores_centro = resultado_agrupado['totalizadores_centro']
+                totais_anuais_conta = resultado_agrupado.get('totais_anuais_conta', {})
+                totalizadores_empresa = resultado_agrupado.get('totalizadores_empresa', {})
+                agrupado = {}  # Não usado quando agrupado por empresa
+                agrupado_por_centro = {}  # Não usado quando agrupado por empresa
+                
+                logger.info(f"📦 Total de empresas agrupadas: {len(agrupado_por_empresa)}")
+                logger.info(f"📦 Lista de empresas encontradas: {list(agrupado_por_empresa.keys())}")
+                for empresa, contas in agrupado_por_empresa.items():
+                    logger.info(f"🏢 Empresa: '{empresa}' | Total de contas: {len(contas)}")
+                    for conta, meses in contas.items():
+                        for mes, valores in meses.items():
+                            logger.debug(f"📌 Empresa: {empresa} | Conta: {conta} | Mês: {mes} | Dados: {valores}")
+                
+                logger.info(f"📦 Totalizadores por centro: {len(totalizadores_centro)}")
+                logger.info(f"📦 Totalizadores por empresa: {len(totalizadores_empresa)}")
+                log_json_pretty(list(agrupado_por_empresa.keys())[:5], "🔑 Empresas agrupadas:")
             else:
                 agrupado = resultado_agrupado['agrupado']
                 totalizadores_centro = resultado_agrupado['totalizadores_centro']
                 totais_anuais_conta = resultado_agrupado.get('totais_anuais_conta', {})
                 agrupado_por_centro = {}  # Não usado quando agrupado por conta
+                agrupado_por_empresa = {}  # Não usado quando agrupado por conta
                 
                 for conta, meses in agrupado.items():
                     for mes, valores in meses.items():
@@ -411,9 +439,12 @@ def painel_view(request):
         'resultados': resultados,
         'agrupado': agrupado if 'agrupado' in locals() else {},
         'agrupado_por_centro': agrupado_por_centro if 'agrupado_por_centro' in locals() else {},
+        'agrupado_por_empresa': agrupado_por_empresa if 'agrupado_por_empresa' in locals() else {},
         'totalizadores_centro': totalizadores_centro if 'totalizadores_centro' in locals() else {},
+        'totalizadores_empresa': totalizadores_empresa if 'totalizadores_empresa' in locals() else {},
         'totais_anuais_conta': totais_anuais_conta if 'totais_anuais_conta' in locals() else {},
         'agrupar_por_centro': agrupar_por_centro if 'agrupar_por_centro' in locals() else False,
+        'agrupar_por_empresa': agrupar_por_empresa if 'agrupar_por_empresa' in locals() else False,
         'meses': meses_lista,
         'ano_atual': ano_atual,
         'pode_gerenciar_usuarios': pode_gerenciar_usuarios,
@@ -425,13 +456,20 @@ def painel_view(request):
     })
 
 # Agrupamento dos dados por conta e mês com totalizadores por centro de resultados
-def agrupar_resultados(dados, agrupar_por_centro=False):
+def agrupar_resultados(dados, agrupar_por_centro=False, agrupar_por_empresa=False):
     from collections import defaultdict
 
     if agrupar_por_centro:
         # Agrupamento por centro de resultados e depois por conta
         agrupado_por_centro = defaultdict(lambda: defaultdict(lambda: defaultdict(dict)))
         totalizadores_centro = defaultdict(lambda: defaultdict(float))
+    elif agrupar_por_empresa:
+        # Agrupamento por empresa quando "Todas" empresas foi selecionada
+        agrupado_por_empresa_dict = defaultdict(lambda: defaultdict(lambda: defaultdict(dict)))
+        agrupado = {}  # Não usado quando agrupado por empresa
+        totalizadores_centro = defaultdict(lambda: defaultdict(float))
+        totais_anuais_conta = defaultdict(lambda: defaultdict(float))
+        totalizadores_empresa = defaultdict(lambda: defaultdict(float))  # Totalizadores por empresa
     else:
         # Agrupamento tradicional por conta
         agrupado = defaultdict(lambda: defaultdict(dict))
@@ -452,6 +490,17 @@ def agrupar_resultados(dados, agrupar_por_centro=False):
             item.get("CENTRO_RESULTADOS") or  # Campo da função DB2
             "Sem Centro"
         )
+        # Obter informação da empresa - tentar diferentes campos possíveis
+        empresa_info = (
+            item.get("empresa") or 
+            item.get("EMPRESA") or 
+            item.get("empresaNome") or
+            item.get("EMPRESA_NOME") or
+            (f"{item.get('idempresa', item.get('IDEMPRESA', ''))} - {item.get('empresaNome', item.get('EMPRESA_NOME', 'Empresa'))}" if item.get('idempresa') or item.get('IDEMPRESA') else "Empresa não identificada")
+        )
+        # Log para debug
+        if agrupar_por_empresa and len(agrupado_por_empresa_dict) <= 3:
+            logger.debug(f"🏢 Campo empresa encontrado: {empresa_info} | idempresa: {item.get('idempresa')} | empresa: {item.get('empresa')}")
 
         # Validação dos dados obrigatórios
         if not conta:
@@ -480,8 +529,23 @@ def agrupar_resultados(dados, agrupar_por_centro=False):
                     'previsto': previsto,
                     'realizado': realizado
                 }
+            elif agrupar_por_empresa:
+                # Agrupar por empresa quando "Todas" empresas foi selecionada
+                agrupado_por_empresa_dict[empresa_info][conta][mes] = {
+                    'ano_anterior': ano_anterior,
+                    'previsto': previsto,
+                    'realizado': realizado,
+                    'centro_resultado': centro_resultado
+                }
+                # Acumular totalizadores por empresa
+                totalizadores_empresa[empresa_info][f"{mes}_ano_anterior"] += ano_anterior
+                totalizadores_empresa[empresa_info][f"{mes}_previsto"] += previsto
+                totalizadores_empresa[empresa_info][f"{mes}_realizado"] += realizado
+                totalizadores_empresa[empresa_info]["ano_anterior_total"] += ano_anterior
+                totalizadores_empresa[empresa_info]["previsto_total"] += previsto
+                totalizadores_empresa[empresa_info]["realizado_total"] += realizado
             else:
-                # Agrupamento tradicional
+                # Agrupamento tradicional por conta
                 agrupado[conta][mes] = {
                     'ano_anterior': ano_anterior,
                     'previsto': previsto,
@@ -501,13 +565,19 @@ def agrupar_resultados(dados, agrupar_por_centro=False):
             
             # Acumular totais anuais por conta (quando não agrupado por centro)
             if not agrupar_por_centro:
-                totais_anuais_conta[conta]["ano_anterior_total"] += ano_anterior
-                totais_anuais_conta[conta]["previsto_total"] += previsto
-                totais_anuais_conta[conta]["realizado_total"] += realizado
+                if agrupar_por_empresa:
+                    # Quando agrupado por empresa, acumular por empresa+conta
+                    totais_anuais_conta[f"{empresa_info}||{conta}"]["ano_anterior_total"] += ano_anterior
+                    totais_anuais_conta[f"{empresa_info}||{conta}"]["previsto_total"] += previsto
+                    totais_anuais_conta[f"{empresa_info}||{conta}"]["realizado_total"] += realizado
+                else:
+                    totais_anuais_conta[conta]["ano_anterior_total"] += ano_anterior
+                    totais_anuais_conta[conta]["previsto_total"] += previsto
+                    totais_anuais_conta[conta]["realizado_total"] += realizado
 
             # Log para debug da estrutura dos dados
-            if len(agrupado) <= 3 if not agrupar_por_centro else len(agrupado_por_centro) <= 3:
-                logger.debug(f"🔍 Item processado - Conta: {conta}, Centro: {centro_resultado}, Mês: {mes}")
+            if (len(agrupado) <= 3 if not agrupar_por_centro and not agrupar_por_empresa else len(agrupado_por_centro) <= 3 if agrupar_por_centro else len(agrupado_por_empresa_dict) <= 3):
+                logger.debug(f"🔍 Item processado - Empresa: {empresa_info}, Conta: {conta}, Centro: {centro_resultado}, Mês: {mes}")
                 logger.debug(f"🔍 Chaves disponíveis no item: {list(item.keys())}")
                 logger.debug(f"🔍 Campo centro_resultado encontrado: {centro_resultado}")
                 logger.debug(f"🔍 Campo descrcentroresultado: {item.get('descrcentroresultado')}")
@@ -527,6 +597,14 @@ def agrupar_resultados(dados, agrupar_por_centro=False):
         return {
             'agrupado_por_centro': to_dict(agrupado_por_centro),
             'totalizadores_centro': to_dict(totalizadores_centro)
+        }
+    elif agrupar_por_empresa:
+        logger.info(f"📦 Total de empresas agrupadas: {len(agrupado_por_empresa_dict)}")
+        return {
+            'agrupado_por_empresa': to_dict(agrupado_por_empresa_dict),
+            'totalizadores_centro': to_dict(totalizadores_centro),
+            'totais_anuais_conta': to_dict(totais_anuais_conta),
+            'totalizadores_empresa': to_dict(totalizadores_empresa)
         }
     else:
         logger.info(f"📦 Total de contas agrupadas: {len(agrupado)}")

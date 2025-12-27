@@ -54,6 +54,8 @@
       height: 34px;
       vertical-align: middle;
     }
+    
+    /* Remover estilos customizados - usar padrão igual aos outros cabeçalhos */
     .sub-header {
       font-size: 12px;
       font-weight: normal;
@@ -502,6 +504,100 @@
             </tr>
             
             <!-- Espaçador entre centros -->
+            <tr class="espacador">
+              <td colspan="{{ meses|calcular_colspan|add:3 }}" style="height: 10px; background-color: #f8f9fa;"></td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% elif agrupado_por_empresa %}
+    <h4 class="mb-3">📊 Controle de Orçamento por Empresa</h4>
+    <div class="scroll-x table-container">
+      <table class="table table-bordered table-sm table-striped agrupado-por-empresa">
+        <thead class="table-dark sticky-header">
+          <tr>
+            <th rowspan="2">Empresa / Conta Contábil</th>
+            {% for mes_num, mes_nome in meses %}
+              <th colspan="3" class="text-center">{{ mes_nome }} / {{ request.POST.ano|default_if_none:"2025" }}</th>
+            {% endfor %}
+            <th colspan="3" class="text-center bg-primary text-white">TOTAIS ANUAIS</th>
+          </tr>
+          <tr>
+            {% for _ in meses %}
+              <th class="sub-header text-center">Ano Ant.</th>
+              <th class="sub-header text-center">Previsto</th>
+              <th class="sub-header text-center">Realizado</th>
+            {% endfor %}
+            <th class="sub-header text-center bg-primary text-white">Ano Ant.</th>
+            <th class="sub-header text-center bg-primary text-white">Previsto</th>
+            <th class="sub-header text-center bg-primary text-white">Realizado</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for empresa, contas in agrupado_por_empresa.items %}
+            <!-- Cabeçalho da Empresa - linha separada como na imagem -->
+            <tr class="centro-header" style="background: #6c757d !important; color: white !important;">
+              <td class="text-left" style="padding: 8px 15px !important; font-size: 1em !important; font-weight: bold !important;">
+                <strong>🏢 {{ empresa|default:"Empresa não identificada" }}</strong>
+              </td>
+              <td colspan="{{ meses|calcular_colspan|add:2 }}" style="background: #6c757d !important;"></td>
+            </tr>
+            
+            <!-- Contas da Empresa -->
+            {% for conta, dados_mes in contas.items %}
+              <tr>
+                <td class="ps-4"><strong>{{ conta }}</strong></td>
+                {% for mes_num, _ in meses %}
+                  {% with mes_dados=dados_mes|get_item:mes_num %}
+                    {% if mes_dados %}
+                      <td class="text-end valor-col {% if forloop.counter0|divisibleby:2 %}mes-bg-1{% else %}mes-bg-2{% endif %}">R$ {{ mes_dados.ano_anterior|floatformat:2 }}</td>
+                      <td class="text-end valor-col {% if forloop.counter0|divisibleby:2 %}mes-bg-1{% else %}mes-bg-2{% endif %} {{ mes_dados.previsto|get_previsto_color:mes_dados.ano_anterior }}">R$ {{ mes_dados.previsto|floatformat:2 }}</td>
+                      <td class="text-end valor-col {% if forloop.counter0|divisibleby:2 %}mes-bg-1{% else %}mes-bg-2{% endif %} {{ mes_dados.realizado|get_valor_color:mes_dados.previsto }}">R$ {{ mes_dados.realizado|floatformat:2 }}</td>
+                    {% else %}
+                      <td class="text-end valor-col {% if forloop.counter0|divisibleby:2 %}mes-bg-1{% else %}mes-bg-2{% endif %}">R$ 0,00</td>
+                      <td class="text-end valor-col {% if forloop.counter0|divisibleby:2 %}mes-bg-1{% else %}mes-bg-2{% endif %}">R$ 0,00</td>
+                      <td class="text-end valor-col {% if forloop.counter0|divisibleby:2 %}mes-bg-1{% else %}mes-bg-2{% endif %}">R$ 0,00</td>
+                    {% endif %}
+                  {% endwith %}
+                {% endfor %}
+                <!-- Totais anuais da conta - usar estrutura simplificada do backend -->
+                {% comment %} Buscar totais usando a chave empresa||conta {% endcomment %}
+                {% with chave_completa=empresa|concat:"||"|concat:conta %}
+                  {% with totais_conta=totais_anuais_conta|get_item:chave_completa %}
+                    {% if totais_conta %}
+                      <td class="text-end valor-col bg-primary text-white">R$ {{ totais_conta.ano_anterior_total|default:0|floatformat:2 }}</td>
+                      <td class="text-end valor-col bg-primary text-white {{ totais_conta.previsto_total|default:0|get_previsto_color:totais_conta.ano_anterior_total|default:0 }}">R$ {{ totais_conta.previsto_total|default:0|floatformat:2 }}</td>
+                      <td class="text-end valor-col bg-primary text-white {{ totais_conta.realizado_total|default:0|get_valor_color:totais_conta.previsto_total|default:0 }}">R$ {{ totais_conta.realizado_total|default:0|floatformat:2 }}</td>
+                    {% else %}
+                      <td class="text-end valor-col bg-primary text-white">R$ 0,00</td>
+                      <td class="text-end valor-col bg-primary text-white">R$ 0,00</td>
+                      <td class="text-end valor-col bg-primary text-white">R$ 0,00</td>
+                    {% endif %}
+                  {% endwith %}
+                {% endwith %}
+              </tr>
+            {% endfor %}
+            
+            <!-- Totalizador da Empresa -->
+            <tr class="totalizador-centro" style="background: linear-gradient(45deg, #e74c3c, #c0392b) !important; color: white !important;">
+              <td><strong>💰 TOTAL {{ empresa|default:"Empresa" }}</strong></td>
+              {% for mes_num, _ in meses %}
+                {% with chave_ano=mes_num|concat:"_ano_anterior" chave_prev=mes_num|concat:"_previsto" chave_real=mes_num|concat:"_realizado" %}
+                  <td class="text-end valor-col">R$ {{ totalizadores_empresa|get_item:empresa|get_item:chave_ano|default:0|floatformat:2 }}</td>
+                  <td class="text-end valor-col">R$ {{ totalizadores_empresa|get_item:empresa|get_item:chave_prev|default:0|floatformat:2 }}</td>
+                  <td class="text-end valor-col">R$ {{ totalizadores_empresa|get_item:empresa|get_item:chave_real|default:0|floatformat:2 }}</td>
+                {% endwith %}
+              {% endfor %}
+              <!-- Totais anuais da empresa -->
+              {% with realizado_total=totalizadores_empresa|get_item:empresa|get_item:"realizado_total"|default:0 previsto_total=totalizadores_empresa|get_item:empresa|get_item:"previsto_total"|default:0 ano_anterior_total=totalizadores_empresa|get_item:empresa|get_item:"ano_anterior_total"|default:0 %}
+              <td class="text-end valor-col bg-primary text-white">R$ {{ ano_anterior_total|floatformat:2 }}</td>
+              <td class="text-end valor-col bg-primary text-white {{ previsto_total|get_previsto_color:ano_anterior_total }}">R$ {{ previsto_total|floatformat:2 }}</td>
+              <td class="text-end valor-col bg-primary text-white {{ realizado_total|get_valor_color:previsto_total }}">R$ {{ realizado_total|floatformat:2 }}</td>
+              {% endwith %}
+            </tr>
+            
+            <!-- Espaçador entre empresas -->
             <tr class="espacador">
               <td colspan="{{ meses|calcular_colspan|add:3 }}" style="height: 10px; background-color: #f8f9fa;"></td>
             </tr>

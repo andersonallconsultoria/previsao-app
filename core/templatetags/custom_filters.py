@@ -97,3 +97,11 @@ def get_previsto_color(previsto, ano_anterior):
         return ""
     except (ValueError, TypeError, AttributeError):
         return ""
+
+@register.filter
+def concat(value, arg):
+    """Concatena dois valores como strings"""
+    try:
+        return str(value) + str(arg)
+    except Exception:
+        return ""

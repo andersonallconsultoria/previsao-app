@@ -410,6 +410,7 @@
         {% if tem_acesso_configuracao %}
         <a href="{% url 'configuracao' %}" class="btn btn-success btn-sm ms-1">🔧 Configuração</a>
         {% endif %}
+        <button type="button" id="btn-exportar-excel" class="btn btn-info btn-sm ms-1" style="background-color: #17a2b8 !important; color: white !important; display: none;" {% if sem_centros_permitidos %}disabled{% endif %}>📊 Exportar para Excel</button>
         {% if pode_gerenciar_usuarios %}
         <a href="{% url 'configuracao_usuarios' %}" class="btn btn-info btn-sm ms-1">👥 Config. Usuários</a>
         {% endif %}
@@ -425,6 +426,15 @@
         Centro: {{ request.POST.centro|default:"(Todos)" }}
       </small>
     </div>
+    <script>
+      // Mostrar botão de exportar após pesquisa
+      document.addEventListener('DOMContentLoaded', function() {
+        const btnExportar = document.getElementById('btn-exportar-excel');
+        if (btnExportar) {
+          btnExportar.style.display = 'inline-block';
+        }
+      });
+    </script>
   {% endif %}
 
   {% if agrupar_por_centro and agrupado_por_centro %}
@@ -602,6 +612,24 @@
               <td colspan="{{ meses|calcular_colspan|add:3 }}" style="height: 10px; background-color: #f8f9fa;"></td>
             </tr>
           {% endfor %}
+          
+          <!-- Totalizador Geral (soma de todas as empresas) -->
+          <tr class="totalizador-geral" style="background: linear-gradient(45deg, #8e44ad, #6c3483) !important; color: white !important; font-size: 1.1em !important; font-weight: bold !important;">
+            <td><strong>🌟 TOTAL GERAL (TODAS AS EMPRESAS)</strong></td>
+            {% for mes_num, _ in meses %}
+              {% with chave_ano=mes_num|concat:"_ano_anterior" chave_prev=mes_num|concat:"_previsto" chave_real=mes_num|concat:"_realizado" %}
+                <td class="text-end valor-col">R$ {{ totalizadores_geral|get_item:chave_ano|default:0|floatformat:2 }}</td>
+                <td class="text-end valor-col">R$ {{ totalizadores_geral|get_item:chave_prev|default:0|floatformat:2 }}</td>
+                <td class="text-end valor-col">R$ {{ totalizadores_geral|get_item:chave_real|default:0|floatformat:2 }}</td>
+              {% endwith %}
+            {% endfor %}
+            <!-- Totais anuais gerais -->
+            {% with realizado_total=totalizadores_geral|get_item:"realizado_total"|default:0 previsto_total=totalizadores_geral|get_item:"previsto_total"|default:0 ano_anterior_total=totalizadores_geral|get_item:"ano_anterior_total"|default:0 %}
+            <td class="text-end valor-col bg-primary text-white">R$ {{ ano_anterior_total|floatformat:2 }}</td>
+            <td class="text-end valor-col bg-primary text-white {{ previsto_total|get_previsto_color:ano_anterior_total }}">R$ {{ previsto_total|floatformat:2 }}</td>
+            <td class="text-end valor-col bg-primary text-white {{ realizado_total|get_valor_color:previsto_total }}">R$ {{ realizado_total|floatformat:2 }}</td>
+            {% endwith %}
+          </tr>
         </tbody>
       </table>
     </div>
@@ -811,6 +839,30 @@
           autocompleteResults.style.display = 'none';
         }
       });
+    });
+  </script>
+  
+  <script>
+    // Script para exportar Excel com os parâmetros do formulário
+    document.getElementById('btn-exportar-excel')?.addEventListener('click', function() {
+      const form = document.querySelector('form');
+      if (!form) return;
+      
+      const ano = form.querySelector('[name="ano"]')?.value || '{{ ano_atual }}';
+      const empresa = form.querySelector('[name="empresa"]')?.value || '';
+      const centro = form.querySelector('[name="centro"]')?.value || '';
+      
+      // Construir URL com parâmetros
+      let url = '{% url "exportar_excel" %}?ano=' + encodeURIComponent(ano);
+      if (empresa) {
+        url += '&empresa=' + encodeURIComponent(empresa);
+      }
+      if (centro) {
+        url += '&centro=' + encodeURIComponent(centro);
+      }
+      
+      // Abrir em nova aba para download
+      window.location.href = url;
     });
   </script>
 </body>

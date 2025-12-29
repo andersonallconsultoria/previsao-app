@@ -214,51 +214,63 @@
     <hr class="my-4">
 
     <h4>Configurações Existentes</h4>
-    {% if configuracoes %}
-      <div class="mb-3 row g-2 filtros-config">
-        <div class="col-md-3">
-          <label class="form-label">🔍 Filtrar por Ano</label>
-          <select class="form-select form-select-sm" id="filter-ano">
-            <option value="">Todos os anos</option>
-            <option value="2025">2025</option>
-            <option value="2026">2026</option>
-            <option value="2027">2027</option>
-          </select>
-        </div>
-        <div class="col-md-3">
-          <label class="form-label">🔍 Filtrar por Empresa</label>
-          <select class="form-select form-select-sm" id="filter-empresa">
-            <option value="">Todas as empresas</option>
-            {% for emp in empresas %}
-              <option value="{{ emp.idempresa }}">{{ emp.empresa }}</option>
-            {% endfor %}
-          </select>
-        </div>
-        <div class="col-md-3">
-          <label class="form-label">🔍 Filtrar por Centro</label>
-          <select class="form-select form-select-sm" id="filter-centro">
-            <option value="">Todos os centros</option>
-            {% for cr in centros %}
-              <option value="{{ cr.idcentroresultado }}">{{ cr.centroresultados }}</option>
-            {% endfor %}
-          </select>
-        </div>
-        <div class="col-md-3">
-          <label class="form-label">🔍 Filtrar por Conta</label>
-          <select class="form-select form-select-sm" id="filter-conta">
-            <option value="">Todas as contas</option>
-            {% for cta in contas %}
-              <option value="{{ cta.idctacontabil }}">{{ cta.contabil }}</option>
-            {% endfor %}
-          </select>
-        </div>
+    <div class="mb-3 row g-2 filtros-config">
+      <div class="col-md-3">
+        <label class="form-label">🔍 Filtrar por Ano</label>
+        <select class="form-select form-select-sm" id="filter-ano">
+          <option value="">Todos os anos</option>
+          <option value="2025">2025</option>
+          <option value="2026">2026</option>
+          <option value="2027">2027</option>
+        </select>
       </div>
-      
-      <div id="table-container" style="max-height: 500px; overflow-y: auto; padding: 15px; background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);">
-        <table class="table table-striped table-hover" id="config-table">
-          <thead class="table-dark sticky-top">
-            <tr>
-              <th>#</th>
+      <div class="col-md-3">
+        <label class="form-label">🔍 Filtrar por Empresa</label>
+        <select class="form-select form-select-sm" id="filter-empresa">
+          <option value="">Todas as empresas</option>
+          {% for emp in empresas %}
+            <option value="{{ emp.idempresa }}">{{ emp.empresa }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">🔍 Filtrar por Centro</label>
+        <select class="form-select form-select-sm" id="filter-centro">
+          <option value="">Todos os centros</option>
+          {% for cr in centros %}
+            <option value="{{ cr.idcentroresultado }}">{{ cr.centroresultados }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">🔍 Filtrar por Conta</label>
+        <select class="form-select form-select-sm" id="filter-conta">
+          <option value="">Todas as contas</option>
+          {% for cta in contas %}
+            <option value="{{ cta.idctacontabil }}">{{ cta.contabil }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    
+    <!-- Indicador de carregamento -->
+    <div id="loading-indicator" class="text-center py-4" style="display: none; padding: 15px; background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);">
+      <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">Carregando...</span>
+      </div>
+      <p class="mt-2 text-muted">Carregando configurações...</p>
+    </div>
+    
+    <!-- Mensagem quando não há filtros aplicados -->
+    <div id="no-filters-message" class="alert alert-info" style="display: none; padding: 15px; background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);">
+      <strong>ℹ️ Informação:</strong> Aplique pelo menos um filtro para visualizar as configurações.
+    </div>
+    
+    <div id="table-container" style="max-height: 500px; overflow-y: auto; padding: 15px; background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1); display: none;">
+      <table class="table table-striped table-hover" id="config-table">
+        <thead class="table-dark sticky-top">
+          <tr>
+            <th>#</th>
             <th>Ano</th>
             <th>Empresa</th>
             <th>Centro Resultado</th>
@@ -270,27 +282,10 @@
           </tr>
         </thead>
         <tbody>
-          {% for item in configuracoes %}
-            <tr data-id="{{ forloop.counter0 }}" class="config-row">
-              <td>{{ forloop.counter }}</td>
-            <td class="ano">{{ item.anocadastro|default:"-" }}</td>
-            <td class="empresa">{{ item.ideempprevisao }}</td>
-            <td class="centro">{{ item.idcentroresultado }}</td>
-            <td class="conta">{{ item.idctacontabil }}</td>
-              <td class="mes">{{ item.mesprevisao|default:"-" }}</td>
-            <td class="tipo">{{ item.tipoprevisao }}</td>
-            <td class="valor">{{ item.valorprevisao }}</td>
-            <td>
-              <button type="button" class="btn btn-sm btn-outline-primary btn-editar">Editar</button>
-              <button type="button" class="btn btn-sm btn-success btn-salvar d-none">Salvar</button>
-              <button type="button" class="btn btn-sm btn-secondary btn-cancelar d-none">Cancelar</button>
-                <button type="button" class="btn btn-sm btn-outline-danger btn-excluir ms-1">🗑️ Excluir</button>
-            </td>
-          </tr>
-          {% endfor %}
+          <!-- Será preenchido via AJAX -->
         </tbody>
       </table>
-      </div>
+    </div>
       
       <!-- Paginação -->
       <nav aria-label="Paginação de configurações" style="padding: 15px; background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1); margin-top: 15px;">
@@ -305,41 +300,124 @@
       <script>
         document.addEventListener('DOMContentLoaded', function() {
           const table = document.getElementById('config-table');
+          const tableContainer = document.getElementById('table-container');
+          const loadingIndicator = document.getElementById('loading-indicator');
+          const noFiltersMessage = document.getElementById('no-filters-message');
           let editando = null;
 
-          // ========== PAGINAÇÃO ==========
-          const itemsPerPage = 50;
+          // ========== VARIÁVEIS GLOBAIS ==========
           let currentPage = 1;
-          let filteredRows = Array.from(document.querySelectorAll('.config-row'));
+          let totalConfiguracoes = 0;
+          let hasNext = false;
+          const itemsPerPage = 50;
           
-          function renderPage() {
+          // Mostrar mensagem inicial
+          noFiltersMessage.style.display = 'block';
+          
+          // ========== FUNÇÃO PARA CARREGAR CONFIGURAÇÕES VIA AJAX ==========
+          function carregarConfiguracoes(page = 1) {
+            const anoFilter = document.getElementById('filter-ano').value;
+            const empresaFilter = document.getElementById('filter-empresa').value;
+            const centroFilter = document.getElementById('filter-centro').value;
+            const contaFilter = $('#filter-conta').val() || '';
+            
+            // Verificar se há pelo menos um filtro
+            if (!anoFilter && !empresaFilter && !centroFilter && !contaFilter) {
+              tableContainer.style.display = 'none';
+              loadingIndicator.style.display = 'none';
+              noFiltersMessage.style.display = 'block';
+              document.getElementById('pagination').innerHTML = '';
+              document.getElementById('page-info').textContent = 'Mostrando 0 de 0 configurações';
+              return;
+            }
+            
+            // Mostrar loading e esconder mensagens
+            loadingIndicator.style.display = 'block';
+            tableContainer.style.display = 'none';
+            noFiltersMessage.style.display = 'none';
+            
+            // Construir URL com parâmetros
+            const params = new URLSearchParams({
+              page: page,
+              limit: itemsPerPage
+            });
+            
+            if (anoFilter) params.append('ano', anoFilter);
+            if (empresaFilter) params.append('empresa', empresaFilter);
+            if (centroFilter) params.append('centro', centroFilter);
+            if (contaFilter) params.append('conta', contaFilter);
+            
+            // Fazer requisição AJAX
+            fetch(`{% url 'buscar_configuracoes_ajax' %}?${params.toString()}`)
+              .then(response => response.json())
+              .then(data => {
+                loadingIndicator.style.display = 'none';
+                
+                if (data.success) {
+                  totalConfiguracoes = data.total || 0;
+                  hasNext = data.hasNext || false;
+                  currentPage = data.page || page;
+                  
+                  // Renderizar tabela
+                  renderTable(data.data);
+                  updatePagination();
+                  updatePageInfo();
+                  
+                  tableContainer.style.display = 'block';
+                } else {
+                  alert('Erro ao carregar configurações: ' + (data.message || 'Erro desconhecido'));
+                }
+              })
+              .catch(error => {
+                loadingIndicator.style.display = 'none';
+                console.error('Erro:', error);
+                alert('Erro ao carregar configurações. Tente novamente.');
+              });
+          }
+          
+          // ========== RENDERIZAR TABELA ==========
+          function renderTable(configuracoes) {
             const tbody = table.querySelector('tbody');
-            const startIndex = (currentPage - 1) * itemsPerPage;
-            const endIndex = startIndex + itemsPerPage;
-            const pageRows = filteredRows.slice(startIndex, endIndex);
-            const totalRows = filteredRows.length;
+            tbody.innerHTML = '';
             
-            // Remove todas as linhas
-            tbody.querySelectorAll('.config-row').forEach(row => row.remove());
+            if (configuracoes.length === 0) {
+              tbody.innerHTML = '<tr><td colspan="9" class="text-center">Nenhuma configuração encontrada com os filtros aplicados.</td></tr>';
+              return;
+            }
             
-            // Adiciona apenas as linhas da página atual
-            pageRows.forEach(row => tbody.appendChild(row));
+            configuracoes.forEach((item, index) => {
+              const rowNum = (currentPage - 1) * itemsPerPage + index + 1;
+              const row = document.createElement('tr');
+              row.className = 'config-row';
+              row.dataset.id = item.id || index;
+              
+              row.innerHTML = `
+                <td>${rowNum}</td>
+                <td class="ano">${item.anocadastro || '-'}</td>
+                <td class="empresa">${item.ideempprevisao || '-'}</td>
+                <td class="centro">${item.idcentroresultado || '-'}</td>
+                <td class="conta">${item.idctacontabil || '-'}</td>
+                <td class="mes">${item.mesprevisao || '-'}</td>
+                <td class="tipo">${item.tipoprevisao || '-'}</td>
+                <td class="valor">${item.valorprevisao || '-'}</td>
+                <td>
+                  <button type="button" class="btn btn-sm btn-outline-primary btn-editar">Editar</button>
+                  <button type="button" class="btn btn-sm btn-success btn-salvar d-none">Salvar</button>
+                  <button type="button" class="btn btn-sm btn-secondary btn-cancelar d-none">Cancelar</button>
+                  <button type="button" class="btn btn-sm btn-outline-danger btn-excluir ms-1">🗑️ Excluir</button>
+                </td>
+              `;
+              
+              tbody.appendChild(row);
+            });
             
-            // Atualiza paginação
-            updatePagination(totalRows);
-            updatePageInfo(totalRows, startIndex, endIndex);
+            // Aplicar event listeners
+            bindEventListeners();
           }
           
-          // Armazenar todas as linhas originais
-          let allRows = Array.from(document.querySelectorAll('.config-row'));
-          
-          // Função para aplicar event listeners
-          function bindEventListeners() {
-            attachRowEventListeners();
-          }
-          
-          function updatePagination(totalRows) {
-            const totalPages = Math.ceil(totalRows / itemsPerPage);
+          // ========== ATUALIZAR PAGINAÇÃO ==========
+          function updatePagination() {
+            const totalPages = Math.ceil(totalConfiguracoes / itemsPerPage);
             const pagination = document.getElementById('pagination');
             pagination.innerHTML = '';
             
@@ -401,51 +479,35 @@
               link.addEventListener('click', function(e) {
                 e.preventDefault();
                 const page = parseInt(this.dataset.page);
-                if (page && page >= 1 && page <= totalPages) {
-                  currentPage = page;
-                  renderPage();
-                  bindEventListeners();
+                if (page && page >= 1 && page <= totalPages && !this.closest('.page-item').classList.contains('disabled')) {
+                  carregarConfiguracoes(page);
                 }
               });
             });
           }
           
-          function updatePageInfo(totalRows, startIndex, endIndex) {
-            const actualEnd = Math.min(endIndex, totalRows);
+          // ========== ATUALIZAR INFO DA PÁGINA ==========
+          function updatePageInfo() {
+            const startIndex = (currentPage - 1) * itemsPerPage;
+            const endIndex = Math.min(startIndex + itemsPerPage, totalConfiguracoes);
             const info = document.getElementById('page-info');
-            info.textContent = `Mostrando ${startIndex + 1} a ${actualEnd} de ${totalRows} configurações`;
+            if (totalConfiguracoes > 0) {
+              info.textContent = `Mostrando ${startIndex + 1} a ${endIndex} de ${totalConfiguracoes} configurações`;
+            } else {
+              info.textContent = 'Mostrando 0 de 0 configurações';
+            }
           }
           
-          // Filtros (tornar global)
+          // ========== APLICAR FILTROS ==========
           window.applyFilters = function() {
-            const anoFilter = document.getElementById('filter-ano').value;
-            const empresaFilter = document.getElementById('filter-empresa').value;
-            const centroFilter = document.getElementById('filter-centro').value;
-            const contaFilter = document.getElementById('filter-conta').value;
-            
-            filteredRows = allRows.filter(row => {
-              const ano = row.querySelector('.ano') ? row.querySelector('.ano').textContent.trim() : '';
-              const empresa = row.querySelector('.empresa').textContent.trim();
-              const centro = row.querySelector('.centro').textContent.trim();
-              const conta = row.querySelector('.conta').textContent.trim();
-              
-              const matchAno = !anoFilter || ano === anoFilter;
-              const matchEmpresa = !empresaFilter || empresa === empresaFilter;
-              const matchCentro = !centroFilter || centro === centroFilter;
-              const matchConta = !contaFilter || conta === contaFilter;
-              
-              return matchAno && matchEmpresa && matchCentro && matchConta;
-            });
-            
             currentPage = 1;
-            renderPage();
-            bindEventListeners();
+            carregarConfiguracoes(1);
           }
           
+          // Event listeners para filtros
           document.getElementById('filter-ano').addEventListener('change', applyFilters);
           document.getElementById('filter-empresa').addEventListener('change', applyFilters);
           document.getElementById('filter-centro').addEventListener('change', applyFilters);
-          // Event listener para filter-conta será adicionado pelo Select2
           
           // Função para aplicar event listeners aos botões
           function bindEventListeners() {
@@ -545,13 +607,9 @@
               .then(response => response.json())
               .then(data => {
                 if (data.success) {
-                  // Atualiza a linha com os novos valores
-                  editando.innerHTML = `<td>${editando.querySelector('td:first-child').textContent}</td><td class="ano">${ano}</td><td class="empresa">${empresa}</td><td class="centro">${centro}</td><td class="conta">${conta}</td><td class="mes">${mes}</td><td class="tipo">${tipo}</td><td class="valor">${valor}</td><td><button type='button' class='btn btn-sm btn-outline-primary btn-editar'>Editar</button><button type='button' class='btn btn-sm btn-success btn-salvar d-none'>Salvar</button><button type='button' class='btn btn-sm btn-secondary btn-cancelar d-none'>Cancelar</button><button type='button' class='btn btn-sm btn-outline-danger btn-excluir ms-1'>🗑️ Excluir</button></td>`;
                   editando = null;
-                  // Reaplica eventos
-                  document.querySelectorAll('.btn-editar').forEach(function(btn) {
-                    btn.onclick = function() { location.reload(); };
-                  });
+                  // Recarregar configurações após atualização
+                  carregarConfiguracoes(currentPage);
                   alert('Configuração atualizada com sucesso!');
                 } else {
                   alert('Erro ao atualizar: ' + data.message);
@@ -608,17 +666,8 @@
               .then(response => response.json())
               .then(data => {
                 if (data.success) {
-                  // Remove a linha da tabela e atualiza os dados
-                  allRows = allRows.filter(row => row !== tr);
-                  filteredRows = filteredRows.filter(row => row !== tr);
-                  
-                  // Se não há mais linhas na página atual e há páginas anteriores, volta para página anterior
-                  if (filteredRows.length > 0 && filteredRows.length <= (currentPage - 1) * itemsPerPage && currentPage > 1) {
-                    currentPage--;
-                  }
-                  
-                  // Re-renderiza a página
-                  renderPage();
+                  // Recarregar configurações após exclusão
+                  carregarConfiguracoes(currentPage);
                   alert('Configuração excluída com sucesso!');
                 } else {
                   alert('Erro ao excluir: ' + data.message);
@@ -632,9 +681,7 @@
           });
           }
           
-          // Inicializar paginação
-          renderPage();
-          bindEventListeners();
+          // Não inicializar nada - aguardar filtros serem aplicados
         });
       </script>
       
@@ -686,9 +733,6 @@
           });
         });
       </script>
-    {% else %}
-      <div class="alert alert-info">Nenhuma configuração encontrada.</div>
-    {% endif %}
   </div>
   
   <script>

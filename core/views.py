@@ -1,5 +1,5 @@
 from django.shortcuts import render, redirect
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 import requests
 from decouple import config
 from .decorators import token_required
@@ -9,6 +9,9 @@ import json
 from datetime import datetime
 import os
 from django.conf import settings
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.utils import get_column_letter
 
 logger = logging.getLogger(__name__)
 
@@ -375,6 +378,17 @@ def painel_view(request):
                 logger.info("🏢 'Todas' empresas selecionada - agrupando por empresa")
             
             resultado_agrupado = agrupar_resultados(resultados, agrupar_por_centro, agrupar_por_empresa)
+            
+            # Salvar dados agrupados na sessão para exportação rápida (sem nova requisição à API)
+            request.session['dados_exportacao'] = {
+                'resultado_agrupado': resultado_agrupado,
+                'agrupar_por_centro': agrupar_por_centro,
+                'agrupar_por_empresa': agrupar_por_empresa,
+                'ano': ano,
+                'empresa': empresa,
+                'centro': centro,
+            }
+            logger.info("💾 Dados salvos na sessão para exportação rápida")
                 
             if agrupar_por_centro:
                 agrupado_por_centro = resultado_agrupado['agrupado_por_centro']
@@ -395,6 +409,7 @@ def painel_view(request):
                 totalizadores_centro = resultado_agrupado['totalizadores_centro']
                 totais_anuais_conta = resultado_agrupado.get('totais_anuais_conta', {})
                 totalizadores_empresa = resultado_agrupado.get('totalizadores_empresa', {})
+                totalizadores_geral = resultado_agrupado.get('totalizadores_geral', {})
                 agrupado = {}  # Não usado quando agrupado por empresa
                 agrupado_por_centro = {}  # Não usado quando agrupado por empresa
                 
@@ -442,6 +457,7 @@ def painel_view(request):
         'agrupado_por_empresa': agrupado_por_empresa if 'agrupado_por_empresa' in locals() else {},
         'totalizadores_centro': totalizadores_centro if 'totalizadores_centro' in locals() else {},
         'totalizadores_empresa': totalizadores_empresa if 'totalizadores_empresa' in locals() else {},
+        'totalizadores_geral': totalizadores_geral if 'totalizadores_geral' in locals() else {},
         'totais_anuais_conta': totais_anuais_conta if 'totais_anuais_conta' in locals() else {},
         'agrupar_por_centro': agrupar_por_centro if 'agrupar_por_centro' in locals() else False,
         'agrupar_por_empresa': agrupar_por_empresa if 'agrupar_por_empresa' in locals() else False,
@@ -600,11 +616,19 @@ def agrupar_resultados(dados, agrupar_por_centro=False, agrupar_por_empresa=Fals
         }
     elif agrupar_por_empresa:
         logger.info(f"📦 Total de empresas agrupadas: {len(agrupado_por_empresa_dict)}")
+        
+        # Calcular totalizador geral (soma de todas as empresas)
+        totalizadores_geral = defaultdict(float)
+        for empresa, totais in totalizadores_empresa.items():
+            for chave, valor in totais.items():
+                totalizadores_geral[chave] += valor
+        
         return {
             'agrupado_por_empresa': to_dict(agrupado_por_empresa_dict),
             'totalizadores_centro': to_dict(totalizadores_centro),
             'totais_anuais_conta': to_dict(totais_anuais_conta),
-            'totalizadores_empresa': to_dict(totalizadores_empresa)
+            'totalizadores_empresa': to_dict(totalizadores_empresa),
+            'totalizadores_geral': to_dict(totalizadores_geral)
         }
     else:
         logger.info(f"📦 Total de contas agrupadas: {len(agrupado)}")
@@ -673,7 +697,8 @@ def configuracao_view(request):
     empresas = post_api('cadastro_empresa')
     centros = post_api('cadastro_centroresultados')
     contas = post_api('cadastro_contabil')
-    configuracoes = post_api('centroresultado_config', use_pagination=True)
+    # Não carregar todas as configurações inicialmente - será carregado via AJAX quando filtros forem aplicados
+    # configuracoes = post_api('centroresultado_config', use_pagination=True)
 
     meses = [
         ('1', 'Janeiro'), ('2', 'Fevereiro'), ('3', 'Março'),
@@ -690,7 +715,7 @@ def configuracao_view(request):
         'empresas': empresas,
         'centros': centros,
         'contas': contas,
-        'configuracoes': configuracoes,
+        'configuracoes': [],  # Inicialmente vazio - será carregado via AJAX
         'meses': meses,
         'success_message': success_message,
         'error_message': error_message
@@ -817,6 +842,115 @@ def atualizar_configuracao(request):
         })
 
     return JsonResponse({'success': False, 'message': 'Método não permitido'}, status=405)
+
+# Buscar configurações via AJAX (filtradas e paginadas)
+@token_required
+def buscar_configuracoes_ajax(request):
+    """View AJAX para buscar configurações com filtros e paginação"""
+    if request.method != 'GET':
+        return JsonResponse({'success': False, 'message': 'Método não permitido'}, status=405)
+    
+    token = request.session.get('token')
+    if not token:
+        return JsonResponse({'success': False, 'message': 'Não autenticado'}, status=401)
+    
+    headers = {
+        'Authorization': f"Bearer {token}",
+        'Content-Type': 'application/json'
+    }
+    
+    # Obter filtros da query string
+    ano_filter = request.GET.get('ano', '').strip()
+    empresa_filter = request.GET.get('empresa', '').strip()
+    centro_filter = request.GET.get('centro', '').strip()
+    conta_filter = request.GET.get('conta', '').strip()
+    page = int(request.GET.get('page', 1))
+    limit = int(request.GET.get('limit', 50))
+    
+    # Construir payload para a API
+    clausulas = []
+    
+    if ano_filter:
+        clausulas.append({
+            "campo": "anocadastro",
+            "operadorlogico": "AND",
+            "operador": "IGUAL",
+            "valor": int(ano_filter)
+        })
+    
+    if empresa_filter:
+        clausulas.append({
+            "campo": "ideempprevisao",
+            "operadorlogico": "AND",
+            "operador": "IGUAL",
+            "valor": int(empresa_filter)
+        })
+    
+    if centro_filter:
+        clausulas.append({
+            "campo": "idcentroresultado",
+            "operadorlogico": "AND",
+            "operador": "IGUAL",
+            "valor": int(centro_filter)
+        })
+    
+    if conta_filter:
+        clausulas.append({
+            "campo": "idctacontabil",
+            "operadorlogico": "AND",
+            "operador": "IGUAL",
+            "valor": int(conta_filter)
+        })
+    
+    # Se não há filtros, retornar vazio (não carregar tudo)
+    if not clausulas:
+        return JsonResponse({
+            'success': True,
+            'data': [],
+            'total': 0,
+            'page': page,
+            'hasNext': False,
+            'message': 'Aplique pelo menos um filtro para visualizar as configurações'
+        })
+    
+    payload = {
+        "page": page,
+        "limit": limit,
+        "clausulas": clausulas
+    }
+    
+    url = f"{get_dynamic_config('API_BASE_URL')}/cisspoder-service/centroresultado_config"
+    
+    try:
+        resp = requests.post(url, json=payload, headers=headers, timeout=30)
+        
+        if resp.status_code == 200:
+            response_data = resp.json()
+            configuracoes = response_data.get("data", [])
+            total = response_data.get("total", len(configuracoes))
+            has_next = response_data.get("hasNext", False)
+            
+            logger.info(f"📄 Configurações AJAX - Página {page}: {len(configuracoes)} registros (filtros aplicados)")
+            
+            return JsonResponse({
+                'success': True,
+                'data': configuracoes,
+                'total': total,
+                'page': page,
+                'hasNext': has_next
+            })
+        else:
+            logger.warning(f"⚠️ Erro ao buscar configurações: {resp.status_code} - {resp.text}")
+            return JsonResponse({
+                'success': False,
+                'message': f'Erro ao buscar configurações: {resp.status_code}'
+            }, status=resp.status_code)
+    except Exception as e:
+        logger.exception(f"❌ Erro ao buscar configurações via AJAX")
+        return JsonResponse({
+            'success': False,
+            'message': f'Erro ao buscar configurações: {str(e)}'
+        }, status=500)
 
 # Logout
 def logout_view(request):
@@ -1277,3 +1411,1008 @@ def gerenciar_usuarios_centros(request):
         return JsonResponse({'success': False, 'message': 'Erro ao salvar configuração'})
     
     return JsonResponse({'success': False, 'message': 'Método não permitido'}, status=405)
+
+# Exportar para Excel
+@token_required
+def exportar_excel_view(request):
+    """Exporta os dados do painel para Excel usando dados da sessão (já consultados)"""
+    from io import BytesIO
+    
+    username = request.session.get('username', '')
+    centros_permitidos_ids = get_centros_permitidos(username)
+    
+    # Obter parâmetros da query string (GET) ou POST
+    ano = int(request.GET.get('ano', request.POST.get('ano', datetime.now().year)))
+    empresa = request.GET.get('empresa') or request.POST.get('empresa') or None
+    centro = request.GET.get('centro') or request.POST.get('centro') or None
+    
+    # Buscar nome do centro e empresa para exibir no Excel
+    token = request.session.get('token')
+    headers = {
+        'Authorization': f"Bearer {token}",
+        'Content-Type': 'application/json'
+    }
+    
+    def post_api(endpoint):
+        url = f"{get_dynamic_config('API_BASE_URL')}/cisspoder-service/{endpoint}"
+        try:
+            resp = requests.post(url, json={"page": 1}, headers=headers)
+            if resp.status_code == 200:
+                return resp.json().get("data", [])
+        except Exception:
+            logger.exception(f"❌ Erro ao buscar {endpoint}")
+        return []
+    
+    # Buscar lista de centros e empresas para obter nomes
+    centros_lista = post_api('cadastro_centroresultados')
+    empresas_lista = post_api('cadastro_empresa')
+    
+    # Filtrar centros conforme permissões
+    if centros_permitidos_ids:
+        centros_lista = [
+            c for c in centros_lista
+            if str(c.get('idcentroresultado')) and int(c.get('idcentroresultado')) in centros_permitidos_ids
+        ]
+    
+    # Obter nome do centro selecionado
+    nome_centro = None
+    if centro and centro.strip():
+        try:
+            centro_id = int(centro)
+            centro_encontrado = next((c for c in centros_lista if c.get('idcentroresultado') == centro_id), None)
+            if centro_encontrado:
+                nome_centro = centro_encontrado.get('centroresultados') or centro_encontrado.get('descrcentroresultado') or f"Centro {centro_id}"
+        except (ValueError, TypeError):
+            pass
+    
+    # Obter nome da empresa selecionada
+    nome_empresa = None
+    if empresa and empresa.strip():
+        try:
+            empresa_id = int(empresa)
+            empresa_encontrada = next((e for e in empresas_lista if e.get('idempresa') == empresa_id), None)
+            if empresa_encontrada:
+                nome_empresa = empresa_encontrada.get('empresa') or f"Empresa {empresa_id}"
+        except (ValueError, TypeError):
+            pass
+    
+    # Validar permissões de centro
+    if centro and centros_permitidos_ids and int(centro) not in centros_permitidos_ids:
+        return HttpResponse("Você não tem permissão para acessar este centro de resultado.", status=403)
+    
+    # Tentar usar dados da sessão (já consultados e processados)
+    dados_sessao = request.session.get('dados_exportacao', {})
+    
+    # Verificar se os dados da sessão correspondem aos filtros atuais
+    usar_dados_sessao = (
+        dados_sessao and
+        dados_sessao.get('ano') == ano and
+        str(dados_sessao.get('empresa', '')) == str(empresa or '') and
+        str(dados_sessao.get('centro', '')) == str(centro or '')
+    )
+    
+    if usar_dados_sessao:
+        # Usar dados já processados da sessão - MUITO MAIS RÁPIDO!
+        logger.info("✅ Usando dados da sessão para exportação (sem nova requisição à API)")
+        resultado_agrupado = dados_sessao['resultado_agrupado']
+        agrupar_por_centro = dados_sessao.get('agrupar_por_centro', False)
+        agrupar_por_empresa = dados_sessao.get('agrupar_por_empresa', False)
+    else:
+        # Fallback: buscar dados da API (caso não tenha dados na sessão)
+        logger.info("⚠️ Dados da sessão não encontrados ou filtros diferentes - buscando da API")
+        token = request.session['token']
+        headers = {
+            'Authorization': f"Bearer {token}",
+            'Content-Type': 'application/json'
+        }
+        
+        # Construir payload igual ao painel_view
+        payload = {
+            "page": 1,
+            "limit": 1000,
+            "clausulas": [
+                {"campo": "anoreferencia", "operadorlogico": "AND", "operador": "IGUAL", "valor": ano}
+            ]
+        }
+        
+        # Adicionar filtro de empresa
+        if empresa and empresa.strip() and empresa != "Todas":
+            payload["clausulas"].append({
+                "campo": "idempfiltro",
+                "operadorlogico": "AND",
+                "operador": "IGUAL",
+                "valor": int(empresa)
+            })
+        else:
+            payload["clausulas"].append({
+                "campo": "idempfiltro",
+                "operadorlogico": "AND",
+                "operador": "IGUAL",
+                "valor": None
+            })
+        
+        # Adicionar filtro de centro
+        agrupar_por_centro = False
+        agrupar_por_empresa = False
+        
+        if centro and centro.strip() and centro != "Todos":
+            payload["clausulas"].append({
+                "campo": "idcentroresultadofiltro",
+                "operadorlogico": "AND",
+                "operador": "IGUAL",
+                "valor": int(centro)
+            })
+        else:
+            if centro == "Todos" or not centro:
+                payload["clausulas"].append({
+                    "campo": "idcentroresultadofiltro",
+                    "operadorlogico": "AND",
+                    "operador": "IGUAL",
+                    "valor": None
+                })
+                agrupar_por_centro = True
+        
+        # Se empresa for "Todas", agrupar por empresa
+        if empresa == "Todas" or (not empresa and payload["clausulas"][1]["valor"] is None):
+            agrupar_por_empresa = True
+            agrupar_por_centro = False
+        
+        # Buscar dados da API
+        url = f"{get_dynamic_config('API_BASE_URL')}/cisspoder-service/centro_resultado_bi"
+        resultados = []
+        
+        try:
+            page = 1
+            while True:
+                payload["page"] = page
+                resp = requests.post(url, json=payload, headers=headers, timeout=120)
+                
+                if resp.status_code == 200:
+                    data = resp.json()
+                    page_data = data.get("data", [])
+                    resultados.extend(page_data)
+                    
+                    if not data.get("hasNext", False):
+                        break
+                    page += 1
+                else:
+                    logger.error(f"⚠️ API retornou status {resp.status_code} na página {page}")
+                    break
+        except requests.exceptions.Timeout:
+            logger.exception(f"❌ Timeout ao buscar dados para exportação (mais de 120 segundos)")
+            return HttpResponse(
+                "<html><body style='font-family: Arial; padding: 20px;'><h1>Erro ao Exportar</h1>"
+                "<p>A requisição demorou muito tempo para ser processada. "
+                "Tente fazer uma pesquisa primeiro e depois exportar.</p>"
+                "<p><a href='javascript:history.back()'>← Voltar</a></p></body></html>",
+                status=500
+            )
+        except Exception as e:
+            logger.exception(f"❌ Erro ao buscar dados para exportação: {str(e)}")
+            return HttpResponse(
+                f"<html><body style='font-family: Arial; padding: 20px;'><h1>Erro ao Exportar</h1>"
+                f"<p>Ocorreu um erro ao buscar os dados: {str(e)}</p>"
+                "<p><a href='javascript:history.back()'>← Voltar</a></p></body></html>",
+                status=500
+            )
+        
+        # Agrupar dados
+        resultado_agrupado = agrupar_resultados(resultados, agrupar_por_centro=agrupar_por_centro, agrupar_por_empresa=agrupar_por_empresa)
+    
+    # Funções auxiliares para determinar cores (mesmas regras da tela)
+    def get_previsto_fill(previsto, ano_anterior):
+        """Retorna cor laranja claro se previsto > ano_anterior"""
+        try:
+            previsto_val = float(previsto) if previsto else 0
+            ano_ant_val = float(ano_anterior) if ano_anterior else 0
+            if previsto_val > ano_ant_val:
+                return PatternFill(start_color="FFE699", end_color="FFE699", fill_type="solid")  # Laranja claro
+        except (ValueError, TypeError):
+            pass
+        return None
+    
+    def get_realizado_fill(realizado, previsto):
+        """Retorna cor verde ou vermelho baseado na comparação"""
+        try:
+            realizado_val = float(realizado) if realizado else 0
+            previsto_val = float(previsto) if previsto else 0
+            
+            if realizado_val <= 0:
+                return None
+            
+            if realizado_val > previsto_val:
+                return PatternFill(start_color="FFCCCC", end_color="FFCCCC", fill_type="solid")  # Vermelho claro (alerta)
+            elif realizado_val < previsto_val:
+                return PatternFill(start_color="CCFFCC", end_color="CCFFCC", fill_type="solid")  # Verde claro (positivo)
+        except (ValueError, TypeError):
+            pass
+        return None
+    
+    # Criar workbook Excel
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Controle de Orçamento"
+    
+    # Estilos
+    header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+    header_font = Font(bold=True, color="FFFFFF", size=11)
+    subheader_fill = PatternFill(start_color="4F81BD", end_color="4F81BD", fill_type="solid")
+    subheader_font = Font(bold=True, color="FFFFFF", size=10)
+    center_align = Alignment(horizontal="center", vertical="center")
+    right_align = Alignment(horizontal="right", vertical="center")
+    border = Border(
+        left=Side(style='thin'),
+        right=Side(style='thin'),
+        top=Side(style='thin'),
+        bottom=Side(style='thin')
+    )
+    
+    meses_nomes = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+                   "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
+    meses_lista = [(f"{i:02d}", meses_nomes[i-1]) for i in range(1, 13)]
+    
+    row = 1
+    
+    # Título
+    ws.merge_cells(f'A{row}:{get_column_letter(1 + len(meses_lista) * 3 + 2)}{row}')
+    cell = ws.cell(row=row, column=1)
+    cell.value = f"Controle de Orçamento Empresarial - Ano {ano}"
+    cell.font = Font(bold=True, size=14)
+    cell.alignment = center_align
+    row += 1
+    
+    # Informações de filtros (Empresa e Centro de Resultado)
+    if nome_empresa or nome_centro:
+        ws.merge_cells(f'A{row}:{get_column_letter(1 + len(meses_lista) * 3 + 2)}{row}')
+        cell = ws.cell(row=row, column=1)
+        info_filtros = []
+        if nome_empresa:
+            info_filtros.append(f"Empresa: {nome_empresa}")
+        if nome_centro:
+            info_filtros.append(f"Centro de Resultado: {nome_centro}")
+        cell.value = " | ".join(info_filtros)
+        cell.font = Font(bold=True, size=11, italic=True)
+        cell.alignment = center_align
+        row += 1
+    
+    row += 1
+    
+    # Cabeçalho principal
+    col = 1
+    ws.cell(row=row, column=col, value="Conta Contábil").fill = header_fill
+    ws.cell(row=row, column=col).font = header_font
+    ws.cell(row=row, column=col).alignment = center_align
+    ws.cell(row=row, column=col).border = border
+    col += 1
+    
+    for mes_num, mes_nome in meses_lista:
+        ws.merge_cells(f'{get_column_letter(col)}{row}:{get_column_letter(col+2)}{row}')
+        cell = ws.cell(row=row, column=col)
+        cell.value = f"{mes_nome} / {ano}"
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = center_align
+        cell.border = border
+        col += 3
+    
+    ws.merge_cells(f'{get_column_letter(col)}{row}:{get_column_letter(col+2)}{row}')
+    cell = ws.cell(row=row, column=col)
+    cell.value = "TOTAIS ANUAIS"
+    cell.fill = PatternFill(start_color="0070C0", end_color="0070C0", fill_type="solid")
+    cell.font = header_font
+    cell.alignment = center_align
+    cell.border = border
+    row += 1
+    
+    # Subcabeçalhos
+    col = 1
+    ws.cell(row=row, column=col, value="").fill = subheader_fill
+    ws.cell(row=row, column=col).border = border
+    col += 1
+    
+    for _ in meses_lista:
+        ws.cell(row=row, column=col, value="Ano Ant.").fill = subheader_fill
+        ws.cell(row=row, column=col).font = subheader_font
+        ws.cell(row=row, column=col).alignment = center_align
+        ws.cell(row=row, column=col).border = border
+        col += 1
+        
+        ws.cell(row=row, column=col, value="Previsto").fill = subheader_fill
+        ws.cell(row=row, column=col).font = subheader_font
+        ws.cell(row=row, column=col).alignment = center_align
+        ws.cell(row=row, column=col).border = border
+        col += 1
+        
+        ws.cell(row=row, column=col, value="Realizado").fill = subheader_fill
+        ws.cell(row=row, column=col).font = subheader_font
+        ws.cell(row=row, column=col).alignment = center_align
+        ws.cell(row=row, column=col).border = border
+        col += 1
+    
+    for label in ["Ano Ant.", "Previsto", "Realizado"]:
+        ws.cell(row=row, column=col, value=label).fill = PatternFill(start_color="0070C0", end_color="0070C0", fill_type="solid")
+        ws.cell(row=row, column=col).font = subheader_font
+        ws.cell(row=row, column=col).alignment = center_align
+        ws.cell(row=row, column=col).border = border
+        col += 1
+    
+    row += 1
+    
+    # Dados - Agrupado por empresa
+    if agrupar_por_empresa and 'agrupado_por_empresa' in resultado_agrupado:
+        agrupado_por_empresa = resultado_agrupado['agrupado_por_empresa']
+        totalizadores_empresa = resultado_agrupado.get('totalizadores_empresa', {})
+        totalizadores_geral = resultado_agrupado.get('totalizadores_geral', {})
+        totais_anuais_conta = resultado_agrupado.get('totais_anuais_conta', {})
+        
+        for empresa, contas in agrupado_por_empresa.items():
+            # Cabeçalho da empresa
+            ws.merge_cells(f'A{row}:{get_column_letter(1 + len(meses_lista) * 3 + 2)}{row}')
+            cell = ws.cell(row=row, column=1)
+            cell.value = f"🏢 {empresa}"
+            cell.fill = PatternFill(start_color="6C757D", end_color="6C757D", fill_type="solid")
+            cell.font = Font(bold=True, color="FFFFFF", size=12)
+            cell.alignment = Alignment(horizontal="left", vertical="center")
+            row += 1
+            
+            # Contas da empresa
+            for conta, dados_mes in contas.items():
+                col = 1
+                ws.cell(row=row, column=col, value=conta).font = Font(bold=True)
+                ws.cell(row=row, column=col).border = border
+                col += 1
+                
+                for mes_num, _ in meses_lista:
+                    mes_dados = dados_mes.get(mes_num, {})
+                    ano_ant = mes_dados.get('ano_anterior', 0) or 0
+                    previsto = mes_dados.get('previsto', 0) or 0
+                    realizado = mes_dados.get('realizado', 0) or 0
+                    
+                    # Ano Anterior
+                    ws.cell(row=row, column=col, value=float(ano_ant)).number_format = '#,##0.00'
+                    ws.cell(row=row, column=col).alignment = right_align
+                    ws.cell(row=row, column=col).border = border
+                    col += 1
+                    
+                    # Previsto - aplicar cor laranja se previsto > ano_anterior
+                    previsto_cell = ws.cell(row=row, column=col, value=float(previsto))
+                    previsto_cell.number_format = '#,##0.00'
+                    previsto_cell.alignment = right_align
+                    previsto_cell.border = border
+                    previsto_fill = get_previsto_fill(previsto, ano_ant)
+                    if previsto_fill:
+                        previsto_cell.fill = previsto_fill
+                    col += 1
+                    
+                    # Realizado - aplicar cor verde ou vermelho baseado na comparação
+                    realizado_cell = ws.cell(row=row, column=col, value=float(realizado))
+                    realizado_cell.number_format = '#,##0.00'
+                    realizado_cell.alignment = right_align
+                    realizado_cell.border = border
+                    realizado_fill = get_realizado_fill(realizado, previsto)
+                    if realizado_fill:
+                        realizado_cell.fill = realizado_fill
+                    col += 1
+                
+                # Totais anuais da conta
+                chave_completa = f"{empresa}||{conta}"
+                totais_conta = totais_anuais_conta.get(chave_completa, {})
+                ano_ant_total = totais_conta.get('ano_anterior_total', 0) or 0
+                previsto_total = totais_conta.get('previsto_total', 0) or 0
+                realizado_total = totais_conta.get('realizado_total', 0) or 0
+                
+                # Ano Anterior Total
+                ws.cell(row=row, column=col, value=float(ano_ant_total)).number_format = '#,##0.00'
+                ws.cell(row=row, column=col).fill = PatternFill(start_color="0070C0", end_color="0070C0", fill_type="solid")
+                ws.cell(row=row, column=col).font = Font(bold=True, color="FFFFFF")
+                ws.cell(row=row, column=col).alignment = right_align
+                ws.cell(row=row, column=col).border = border
+                col += 1
+                
+                # Previsto Total - aplicar cor laranja se previsto > ano_anterior
+                previsto_total_cell = ws.cell(row=row, column=col, value=float(previsto_total))
+                previsto_total_cell.number_format = '#,##0.00'
+                previsto_total_cell.font = Font(bold=True, color="FFFFFF")
+                previsto_total_cell.alignment = right_align
+                previsto_total_cell.border = border
+                # Se previsto > ano_anterior, aplicar laranja sobre azul (mistura)
+                if previsto_total > ano_ant_total:
+                    previsto_total_cell.fill = PatternFill(start_color="FFA500", end_color="FFA500", fill_type="solid")  # Laranja mais forte
+                else:
+                    previsto_total_cell.fill = PatternFill(start_color="0070C0", end_color="0070C0", fill_type="solid")
+                col += 1
+                
+                # Realizado Total - aplicar cor verde ou vermelho
+                realizado_total_cell = ws.cell(row=row, column=col, value=float(realizado_total))
+                realizado_total_cell.number_format = '#,##0.00'
+                realizado_total_cell.font = Font(bold=True, color="FFFFFF")
+                realizado_total_cell.alignment = right_align
+                realizado_total_cell.border = border
+                # Aplicar cor baseada na comparação
+                if realizado_total > previsto_total:
+                    realizado_total_cell.fill = PatternFill(start_color="DC143C", end_color="DC143C", fill_type="solid")  # Vermelho mais forte
+                elif realizado_total < previsto_total:
+                    realizado_total_cell.fill = PatternFill(start_color="228B22", end_color="228B22", fill_type="solid")  # Verde mais forte
+                else:
+                    realizado_total_cell.fill = PatternFill(start_color="0070C0", end_color="0070C0", fill_type="solid")
+                col += 1
+                row += 1
+            
+            # Totalizador da empresa
+            ws.merge_cells(f'A{row}:A{row}')
+            cell = ws.cell(row=row, column=1)
+            cell.value = f"💰 TOTAL {empresa}"
+            cell.fill = PatternFill(start_color="E74C3C", end_color="C0392B", fill_type="solid")
+            cell.font = Font(bold=True, color="FFFFFF", size=11)
+            cell.border = border
+            col = 2
+            
+            totais_emp = totalizadores_empresa.get(empresa, {})
+            for mes_num, _ in meses_lista:
+                chave_ano = f"{mes_num}_ano_anterior"
+                chave_prev = f"{mes_num}_previsto"
+                chave_real = f"{mes_num}_realizado"
+                
+                ano_ant_mes = totais_emp.get(chave_ano, 0) or 0
+                previsto_mes = totais_emp.get(chave_prev, 0) or 0
+                realizado_mes = totais_emp.get(chave_real, 0) or 0
+                
+                # Ano Anterior Mensal
+                ws.cell(row=row, column=col, value=float(ano_ant_mes)).number_format = '#,##0.00'
+                ws.cell(row=row, column=col).fill = PatternFill(start_color="E74C3C", end_color="C0392B", fill_type="solid")
+                ws.cell(row=row, column=col).font = Font(bold=True, color="FFFFFF")
+                ws.cell(row=row, column=col).alignment = right_align
+                ws.cell(row=row, column=col).border = border
+                col += 1
+                
+                # Previsto Mensal - aplicar cor laranja se previsto > ano_anterior
+                previsto_mes_cell = ws.cell(row=row, column=col, value=float(previsto_mes))
+                previsto_mes_cell.number_format = '#,##0.00'
+                previsto_mes_cell.font = Font(bold=True, color="FFFFFF")
+                previsto_mes_cell.alignment = right_align
+                previsto_mes_cell.border = border
+                if previsto_mes > ano_ant_mes:
+                    previsto_mes_cell.fill = PatternFill(start_color="FF8C00", end_color="FF8C00", fill_type="solid")  # Laranja escuro
+                else:
+                    previsto_mes_cell.fill = PatternFill(start_color="E74C3C", end_color="C0392B", fill_type="solid")
+                col += 1
+                
+                # Realizado Mensal - aplicar cor verde ou vermelho
+                realizado_mes_cell = ws.cell(row=row, column=col, value=float(realizado_mes))
+                realizado_mes_cell.number_format = '#,##0.00'
+                realizado_mes_cell.font = Font(bold=True, color="FFFFFF")
+                realizado_mes_cell.alignment = right_align
+                realizado_mes_cell.border = border
+                if realizado_mes > previsto_mes:
+                    realizado_mes_cell.fill = PatternFill(start_color="8B0000", end_color="8B0000", fill_type="solid")  # Vermelho escuro
+                elif realizado_mes < previsto_mes:
+                    realizado_mes_cell.fill = PatternFill(start_color="006400", end_color="006400", fill_type="solid")  # Verde escuro
+                else:
+                    realizado_mes_cell.fill = PatternFill(start_color="E74C3C", end_color="C0392B", fill_type="solid")
+                col += 1
+            
+            # Totais anuais da empresa
+            ano_ant_total = totais_emp.get('ano_anterior_total', 0) or 0
+            previsto_total = totais_emp.get('previsto_total', 0) or 0
+            realizado_total = totais_emp.get('realizado_total', 0) or 0
+            
+            # Ano Anterior Total
+            ws.cell(row=row, column=col, value=float(ano_ant_total)).number_format = '#,##0.00'
+            ws.cell(row=row, column=col).fill = PatternFill(start_color="0070C0", end_color="0070C0", fill_type="solid")
+            ws.cell(row=row, column=col).font = Font(bold=True, color="FFFFFF")
+            ws.cell(row=row, column=col).alignment = right_align
+            ws.cell(row=row, column=col).border = border
+            col += 1
+            
+            # Previsto Total - aplicar cor laranja se previsto > ano_anterior
+            previsto_total_cell = ws.cell(row=row, column=col, value=float(previsto_total))
+            previsto_total_cell.number_format = '#,##0.00'
+            previsto_total_cell.font = Font(bold=True, color="FFFFFF")
+            previsto_total_cell.alignment = right_align
+            previsto_total_cell.border = border
+            if previsto_total > ano_ant_total:
+                previsto_total_cell.fill = PatternFill(start_color="FFA500", end_color="FFA500", fill_type="solid")  # Laranja
+            else:
+                previsto_total_cell.fill = PatternFill(start_color="0070C0", end_color="0070C0", fill_type="solid")
+            col += 1
+            
+            # Realizado Total - aplicar cor verde ou vermelho
+            realizado_total_cell = ws.cell(row=row, column=col, value=float(realizado_total))
+            realizado_total_cell.number_format = '#,##0.00'
+            realizado_total_cell.font = Font(bold=True, color="FFFFFF")
+            realizado_total_cell.alignment = right_align
+            realizado_total_cell.border = border
+            if realizado_total > previsto_total:
+                realizado_total_cell.fill = PatternFill(start_color="DC143C", end_color="DC143C", fill_type="solid")  # Vermelho
+            elif realizado_total < previsto_total:
+                realizado_total_cell.fill = PatternFill(start_color="228B22", end_color="228B22", fill_type="solid")  # Verde
+            else:
+                realizado_total_cell.fill = PatternFill(start_color="0070C0", end_color="0070C0", fill_type="solid")
+            col += 1
+            row += 2
+        
+        # Totalizador geral
+        if totalizadores_geral:
+            ws.merge_cells(f'A{row}:A{row}')
+            cell = ws.cell(row=row, column=1)
+            cell.value = "🌟 TOTAL GERAL (TODAS AS EMPRESAS)"
+            cell.fill = PatternFill(start_color="8E44AD", end_color="6C3483", fill_type="solid")
+            cell.font = Font(bold=True, color="FFFFFF", size=12)
+            cell.border = border
+            col = 2
+            
+            for mes_num, _ in meses_lista:
+                chave_ano = f"{mes_num}_ano_anterior"
+                chave_prev = f"{mes_num}_previsto"
+                chave_real = f"{mes_num}_realizado"
+                
+                ano_ant_mes = totalizadores_geral.get(chave_ano, 0) or 0
+                previsto_mes = totalizadores_geral.get(chave_prev, 0) or 0
+                realizado_mes = totalizadores_geral.get(chave_real, 0) or 0
+                
+                # Ano Anterior Mensal
+                ws.cell(row=row, column=col, value=float(ano_ant_mes)).number_format = '#,##0.00'
+                ws.cell(row=row, column=col).fill = PatternFill(start_color="8E44AD", end_color="6C3483", fill_type="solid")
+                ws.cell(row=row, column=col).font = Font(bold=True, color="FFFFFF")
+                ws.cell(row=row, column=col).alignment = right_align
+                ws.cell(row=row, column=col).border = border
+                col += 1
+                
+                # Previsto Mensal - aplicar cor laranja se previsto > ano_anterior
+                previsto_mes_cell = ws.cell(row=row, column=col, value=float(previsto_mes))
+                previsto_mes_cell.number_format = '#,##0.00'
+                previsto_mes_cell.font = Font(bold=True, color="FFFFFF")
+                previsto_mes_cell.alignment = right_align
+                previsto_mes_cell.border = border
+                if previsto_mes > ano_ant_mes:
+                    previsto_mes_cell.fill = PatternFill(start_color="FF8C00", end_color="FF8C00", fill_type="solid")  # Laranja escuro
+                else:
+                    previsto_mes_cell.fill = PatternFill(start_color="8E44AD", end_color="6C3483", fill_type="solid")
+                col += 1
+                
+                # Realizado Mensal - aplicar cor verde ou vermelho
+                realizado_mes_cell = ws.cell(row=row, column=col, value=float(realizado_mes))
+                realizado_mes_cell.number_format = '#,##0.00'
+                realizado_mes_cell.font = Font(bold=True, color="FFFFFF")
+                realizado_mes_cell.alignment = right_align
+                realizado_mes_cell.border = border
+                if realizado_mes > previsto_mes:
+                    realizado_mes_cell.fill = PatternFill(start_color="8B0000", end_color="8B0000", fill_type="solid")  # Vermelho escuro
+                elif realizado_mes < previsto_mes:
+                    realizado_mes_cell.fill = PatternFill(start_color="006400", end_color="006400", fill_type="solid")  # Verde escuro
+                else:
+                    realizado_mes_cell.fill = PatternFill(start_color="8E44AD", end_color="6C3483", fill_type="solid")
+                col += 1
+            
+            # Totais anuais gerais
+            ano_ant_total = totalizadores_geral.get('ano_anterior_total', 0) or 0
+            previsto_total = totalizadores_geral.get('previsto_total', 0) or 0
+            realizado_total = totalizadores_geral.get('realizado_total', 0) or 0
+            
+            # Ano Anterior Total
+            ws.cell(row=row, column=col, value=float(ano_ant_total)).number_format = '#,##0.00'
+            ws.cell(row=row, column=col).fill = PatternFill(start_color="0070C0", end_color="0070C0", fill_type="solid")
+            ws.cell(row=row, column=col).font = Font(bold=True, color="FFFFFF")
+            ws.cell(row=row, column=col).alignment = right_align
+            ws.cell(row=row, column=col).border = border
+            col += 1
+            
+            # Previsto Total - aplicar cor laranja se previsto > ano_anterior
+            previsto_total_cell = ws.cell(row=row, column=col, value=float(previsto_total))
+            previsto_total_cell.number_format = '#,##0.00'
+            previsto_total_cell.font = Font(bold=True, color="FFFFFF")
+            previsto_total_cell.alignment = right_align
+            previsto_total_cell.border = border
+            if previsto_total > ano_ant_total:
+                previsto_total_cell.fill = PatternFill(start_color="FFA500", end_color="FFA500", fill_type="solid")  # Laranja
+            else:
+                previsto_total_cell.fill = PatternFill(start_color="0070C0", end_color="0070C0", fill_type="solid")
+            col += 1
+            
+            # Realizado Total - aplicar cor verde ou vermelho
+            realizado_total_cell = ws.cell(row=row, column=col, value=float(realizado_total))
+            realizado_total_cell.number_format = '#,##0.00'
+            realizado_total_cell.font = Font(bold=True, color="FFFFFF")
+            realizado_total_cell.alignment = right_align
+            realizado_total_cell.border = border
+            if realizado_total > previsto_total:
+                realizado_total_cell.fill = PatternFill(start_color="DC143C", end_color="DC143C", fill_type="solid")  # Vermelho
+            elif realizado_total < previsto_total:
+                realizado_total_cell.fill = PatternFill(start_color="228B22", end_color="228B22", fill_type="solid")  # Verde
+            else:
+                realizado_total_cell.fill = PatternFill(start_color="0070C0", end_color="0070C0", fill_type="solid")
+            col += 1
+    
+    elif agrupar_por_centro and 'agrupado_por_centro' in resultado_agrupado:
+        agrupado_por_centro = resultado_agrupado['agrupado_por_centro']
+        totalizadores_centro = resultado_agrupado.get('totalizadores_centro', {})
+        totais_anuais_conta = resultado_agrupado.get('totais_anuais_conta', {})
+        
+        for centro, contas in agrupado_por_centro.items():
+            # Cabeçalho do centro
+            ws.merge_cells(f'A{row}:{get_column_letter(1 + len(meses_lista) * 3 + 2)}{row}')
+            cell = ws.cell(row=row, column=1)
+            cell.value = f"🏢 {centro}"
+            cell.fill = PatternFill(start_color="2C3E50", end_color="34495E", fill_type="solid")
+            cell.font = Font(bold=True, color="FFFFFF", size=12)
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+            row += 1
+            
+            # Contas do centro
+            for conta, dados_mes in contas.items():
+                col = 1
+                ws.cell(row=row, column=col, value=conta).font = Font(bold=True)
+                ws.cell(row=row, column=col).border = border
+                col += 1
+                
+                for mes_num, _ in meses_lista:
+                    mes_dados = dados_mes.get(mes_num, {})
+                    ano_ant = mes_dados.get('ano_anterior', 0) or 0
+                    previsto = mes_dados.get('previsto', 0) or 0
+                    realizado = mes_dados.get('realizado', 0) or 0
+                    
+                    # Ano Anterior
+                    ws.cell(row=row, column=col, value=float(ano_ant)).number_format = '#,##0.00'
+                    ws.cell(row=row, column=col).alignment = right_align
+                    ws.cell(row=row, column=col).border = border
+                    col += 1
+                    
+                    # Previsto - aplicar cor laranja se previsto > ano_anterior
+                    previsto_cell = ws.cell(row=row, column=col, value=float(previsto))
+                    previsto_cell.number_format = '#,##0.00'
+                    previsto_cell.alignment = right_align
+                    previsto_cell.border = border
+                    previsto_fill = get_previsto_fill(previsto, ano_ant)
+                    if previsto_fill:
+                        previsto_cell.fill = previsto_fill
+                    col += 1
+                    
+                    # Realizado - aplicar cor verde ou vermelho baseado na comparação
+                    realizado_cell = ws.cell(row=row, column=col, value=float(realizado))
+                    realizado_cell.number_format = '#,##0.00'
+                    realizado_cell.alignment = right_align
+                    realizado_cell.border = border
+                    realizado_fill = get_realizado_fill(realizado, previsto)
+                    if realizado_fill:
+                        realizado_cell.fill = realizado_fill
+                    col += 1
+                
+                # Totais anuais da conta
+                totais_conta = totais_anuais_conta.get(conta, {})
+                ano_ant_total = totais_conta.get('ano_anterior_total', 0) or 0
+                previsto_total = totais_conta.get('previsto_total', 0) or 0
+                realizado_total = totais_conta.get('realizado_total', 0) or 0
+                
+                # Ano Anterior Total
+                ws.cell(row=row, column=col, value=float(ano_ant_total)).number_format = '#,##0.00'
+                ws.cell(row=row, column=col).fill = PatternFill(start_color="0070C0", end_color="0070C0", fill_type="solid")
+                ws.cell(row=row, column=col).font = Font(bold=True, color="FFFFFF")
+                ws.cell(row=row, column=col).alignment = right_align
+                ws.cell(row=row, column=col).border = border
+                col += 1
+                
+                # Previsto Total - aplicar cor laranja se previsto > ano_anterior
+                previsto_total_cell = ws.cell(row=row, column=col, value=float(previsto_total))
+                previsto_total_cell.number_format = '#,##0.00'
+                previsto_total_cell.font = Font(bold=True, color="FFFFFF")
+                previsto_total_cell.alignment = right_align
+                previsto_total_cell.border = border
+                if previsto_total > ano_ant_total:
+                    previsto_total_cell.fill = PatternFill(start_color="FFA500", end_color="FFA500", fill_type="solid")  # Laranja
+                else:
+                    previsto_total_cell.fill = PatternFill(start_color="0070C0", end_color="0070C0", fill_type="solid")
+                col += 1
+                
+                # Realizado Total - aplicar cor verde ou vermelho
+                realizado_total_cell = ws.cell(row=row, column=col, value=float(realizado_total))
+                realizado_total_cell.number_format = '#,##0.00'
+                realizado_total_cell.font = Font(bold=True, color="FFFFFF")
+                realizado_total_cell.alignment = right_align
+                realizado_total_cell.border = border
+                if realizado_total > previsto_total:
+                    realizado_total_cell.fill = PatternFill(start_color="DC143C", end_color="DC143C", fill_type="solid")  # Vermelho
+                elif realizado_total < previsto_total:
+                    realizado_total_cell.fill = PatternFill(start_color="228B22", end_color="228B22", fill_type="solid")  # Verde
+                else:
+                    realizado_total_cell.fill = PatternFill(start_color="0070C0", end_color="0070C0", fill_type="solid")
+                col += 1
+                row += 1
+            
+            # Totalizador do centro
+            ws.merge_cells(f'A{row}:A{row}')
+            cell = ws.cell(row=row, column=1)
+            cell.value = f"💰 TOTAL {centro}"
+            cell.fill = PatternFill(start_color="E74C3C", end_color="C0392B", fill_type="solid")
+            cell.font = Font(bold=True, color="FFFFFF", size=11)
+            cell.border = border
+            col = 2
+            
+            totais_cent = totalizadores_centro.get(centro, {})
+            for mes_num, _ in meses_lista:
+                chave_ano = f"{mes_num}_ano_anterior"
+                chave_prev = f"{mes_num}_previsto"
+                chave_real = f"{mes_num}_realizado"
+                
+                ano_ant_mes = totais_cent.get(chave_ano, 0) or 0
+                previsto_mes = totais_cent.get(chave_prev, 0) or 0
+                realizado_mes = totais_cent.get(chave_real, 0) or 0
+                
+                # Ano Anterior Mensal
+                ws.cell(row=row, column=col, value=float(ano_ant_mes)).number_format = '#,##0.00'
+                ws.cell(row=row, column=col).fill = PatternFill(start_color="E74C3C", end_color="C0392B", fill_type="solid")
+                ws.cell(row=row, column=col).font = Font(bold=True, color="FFFFFF")
+                ws.cell(row=row, column=col).alignment = right_align
+                ws.cell(row=row, column=col).border = border
+                col += 1
+                
+                # Previsto Mensal - aplicar cor laranja se previsto > ano_anterior
+                previsto_mes_cell = ws.cell(row=row, column=col, value=float(previsto_mes))
+                previsto_mes_cell.number_format = '#,##0.00'
+                previsto_mes_cell.font = Font(bold=True, color="FFFFFF")
+                previsto_mes_cell.alignment = right_align
+                previsto_mes_cell.border = border
+                if previsto_mes > ano_ant_mes:
+                    previsto_mes_cell.fill = PatternFill(start_color="FF8C00", end_color="FF8C00", fill_type="solid")  # Laranja escuro
+                else:
+                    previsto_mes_cell.fill = PatternFill(start_color="E74C3C", end_color="C0392B", fill_type="solid")
+                col += 1
+                
+                # Realizado Mensal - aplicar cor verde ou vermelho
+                realizado_mes_cell = ws.cell(row=row, column=col, value=float(realizado_mes))
+                realizado_mes_cell.number_format = '#,##0.00'
+                realizado_mes_cell.font = Font(bold=True, color="FFFFFF")
+                realizado_mes_cell.alignment = right_align
+                realizado_mes_cell.border = border
+                if realizado_mes > previsto_mes:
+                    realizado_mes_cell.fill = PatternFill(start_color="8B0000", end_color="8B0000", fill_type="solid")  # Vermelho escuro
+                elif realizado_mes < previsto_mes:
+                    realizado_mes_cell.fill = PatternFill(start_color="006400", end_color="006400", fill_type="solid")  # Verde escuro
+                else:
+                    realizado_mes_cell.fill = PatternFill(start_color="E74C3C", end_color="C0392B", fill_type="solid")
+                col += 1
+            
+            # Totais anuais do centro
+            ano_ant_total = totais_cent.get('ano_anterior_total', 0) or 0
+            previsto_total = totais_cent.get('previsto_total', 0) or 0
+            realizado_total = totais_cent.get('realizado_total', 0) or 0
+            
+            # Ano Anterior Total
+            ws.cell(row=row, column=col, value=float(ano_ant_total)).number_format = '#,##0.00'
+            ws.cell(row=row, column=col).fill = PatternFill(start_color="0070C0", end_color="0070C0", fill_type="solid")
+            ws.cell(row=row, column=col).font = Font(bold=True, color="FFFFFF")
+            ws.cell(row=row, column=col).alignment = right_align
+            ws.cell(row=row, column=col).border = border
+            col += 1
+            
+            # Previsto Total - aplicar cor laranja se previsto > ano_anterior
+            previsto_total_cell = ws.cell(row=row, column=col, value=float(previsto_total))
+            previsto_total_cell.number_format = '#,##0.00'
+            previsto_total_cell.font = Font(bold=True, color="FFFFFF")
+            previsto_total_cell.alignment = right_align
+            previsto_total_cell.border = border
+            if previsto_total > ano_ant_total:
+                previsto_total_cell.fill = PatternFill(start_color="FFA500", end_color="FFA500", fill_type="solid")  # Laranja
+            else:
+                previsto_total_cell.fill = PatternFill(start_color="0070C0", end_color="0070C0", fill_type="solid")
+            col += 1
+            
+            # Realizado Total - aplicar cor verde ou vermelho
+            realizado_total_cell = ws.cell(row=row, column=col, value=float(realizado_total))
+            realizado_total_cell.number_format = '#,##0.00'
+            realizado_total_cell.font = Font(bold=True, color="FFFFFF")
+            realizado_total_cell.alignment = right_align
+            realizado_total_cell.border = border
+            if realizado_total > previsto_total:
+                realizado_total_cell.fill = PatternFill(start_color="DC143C", end_color="DC143C", fill_type="solid")  # Vermelho
+            elif realizado_total < previsto_total:
+                realizado_total_cell.fill = PatternFill(start_color="228B22", end_color="228B22", fill_type="solid")  # Verde
+            else:
+                realizado_total_cell.fill = PatternFill(start_color="0070C0", end_color="0070C0", fill_type="solid")
+            col += 1
+            row += 2
+    
+    else:
+        # Agrupamento simples por conta (uma empresa específica)
+        agrupado = resultado_agrupado.get('agrupado', {})
+        totais_anuais_conta = resultado_agrupado.get('totais_anuais_conta', {})
+        totalizadores_centro = resultado_agrupado.get('totalizadores_centro', {})
+        
+        for conta, dados_mes in agrupado.items():
+            col = 1
+            ws.cell(row=row, column=col, value=conta).font = Font(bold=True)
+            ws.cell(row=row, column=col).border = border
+            col += 1
+            
+            for mes_num, _ in meses_lista:
+                mes_dados = dados_mes.get(mes_num, {})
+                ano_ant = mes_dados.get('ano_anterior', 0) or 0
+                previsto = mes_dados.get('previsto', 0) or 0
+                realizado = mes_dados.get('realizado', 0) or 0
+                
+                # Ano Anterior
+                ws.cell(row=row, column=col, value=float(ano_ant)).number_format = '#,##0.00'
+                ws.cell(row=row, column=col).alignment = right_align
+                ws.cell(row=row, column=col).border = border
+                col += 1
+                
+                # Previsto - aplicar cor laranja se previsto > ano_anterior
+                previsto_cell = ws.cell(row=row, column=col, value=float(previsto))
+                previsto_cell.number_format = '#,##0.00'
+                previsto_cell.alignment = right_align
+                previsto_cell.border = border
+                previsto_fill = get_previsto_fill(previsto, ano_ant)
+                if previsto_fill:
+                    previsto_cell.fill = previsto_fill
+                col += 1
+                
+                # Realizado - aplicar cor verde ou vermelho baseado na comparação
+                realizado_cell = ws.cell(row=row, column=col, value=float(realizado))
+                realizado_cell.number_format = '#,##0.00'
+                realizado_cell.alignment = right_align
+                realizado_cell.border = border
+                realizado_fill = get_realizado_fill(realizado, previsto)
+                if realizado_fill:
+                    realizado_cell.fill = realizado_fill
+                col += 1
+            
+            # Totais anuais da conta
+            totais_conta = totais_anuais_conta.get(conta, {})
+            ano_ant_total = totais_conta.get('ano_anterior_total', 0) or 0
+            previsto_total = totais_conta.get('previsto_total', 0) or 0
+            realizado_total = totais_conta.get('realizado_total', 0) or 0
+            
+            # Ano Anterior Total
+            ws.cell(row=row, column=col, value=float(ano_ant_total)).number_format = '#,##0.00'
+            ws.cell(row=row, column=col).fill = PatternFill(start_color="0070C0", end_color="0070C0", fill_type="solid")
+            ws.cell(row=row, column=col).font = Font(bold=True, color="FFFFFF")
+            ws.cell(row=row, column=col).alignment = right_align
+            ws.cell(row=row, column=col).border = border
+            col += 1
+            
+            # Previsto Total - aplicar cor laranja se previsto > ano_anterior
+            previsto_total_cell = ws.cell(row=row, column=col, value=float(previsto_total))
+            previsto_total_cell.number_format = '#,##0.00'
+            previsto_total_cell.font = Font(bold=True, color="FFFFFF")
+            previsto_total_cell.alignment = right_align
+            previsto_total_cell.border = border
+            if previsto_total > ano_ant_total:
+                previsto_total_cell.fill = PatternFill(start_color="FFA500", end_color="FFA500", fill_type="solid")  # Laranja
+            else:
+                previsto_total_cell.fill = PatternFill(start_color="0070C0", end_color="0070C0", fill_type="solid")
+            col += 1
+            
+            # Realizado Total - aplicar cor verde ou vermelho
+            realizado_total_cell = ws.cell(row=row, column=col, value=float(realizado_total))
+            realizado_total_cell.number_format = '#,##0.00'
+            realizado_total_cell.font = Font(bold=True, color="FFFFFF")
+            realizado_total_cell.alignment = right_align
+            realizado_total_cell.border = border
+            if realizado_total > previsto_total:
+                realizado_total_cell.fill = PatternFill(start_color="DC143C", end_color="DC143C", fill_type="solid")  # Vermelho
+            elif realizado_total < previsto_total:
+                realizado_total_cell.fill = PatternFill(start_color="228B22", end_color="228B22", fill_type="solid")  # Verde
+            else:
+                realizado_total_cell.fill = PatternFill(start_color="0070C0", end_color="0070C0", fill_type="solid")
+            col += 1
+            row += 1
+        
+        # Adicionar totalizador quando filtra por uma empresa específica (não agrupado por empresa)
+        # Verificar se há totalizadores de centro disponíveis para calcular total geral
+        if totalizadores_centro:
+            # Calcular totalizador geral somando todos os centros
+            totalizador_geral = {}
+            for centro, totais in totalizadores_centro.items():
+                for chave, valor in totais.items():
+                    if chave not in totalizador_geral:
+                        totalizador_geral[chave] = 0
+                    totalizador_geral[chave] += valor
+            
+            # Adicionar linha de totalizador
+            ws.merge_cells(f'A{row}:A{row}')
+            cell = ws.cell(row=row, column=1)
+            cell.value = "💰 TOTAL GERAL"
+            cell.fill = PatternFill(start_color="E74C3C", end_color="C0392B", fill_type="solid")
+            cell.font = Font(bold=True, color="FFFFFF", size=11)
+            cell.border = border
+            col = 2
+            
+            for mes_num, _ in meses_lista:
+                chave_ano = f"{mes_num}_ano_anterior"
+                chave_prev = f"{mes_num}_previsto"
+                chave_real = f"{mes_num}_realizado"
+                
+                ano_ant_mes = totalizador_geral.get(chave_ano, 0) or 0
+                previsto_mes = totalizador_geral.get(chave_prev, 0) or 0
+                realizado_mes = totalizador_geral.get(chave_real, 0) or 0
+                
+                # Ano Anterior Mensal
+                ws.cell(row=row, column=col, value=float(ano_ant_mes)).number_format = '#,##0.00'
+                ws.cell(row=row, column=col).fill = PatternFill(start_color="E74C3C", end_color="C0392B", fill_type="solid")
+                ws.cell(row=row, column=col).font = Font(bold=True, color="FFFFFF")
+                ws.cell(row=row, column=col).alignment = right_align
+                ws.cell(row=row, column=col).border = border
+                col += 1
+                
+                # Previsto Mensal - aplicar cor laranja se previsto > ano_anterior
+                previsto_mes_cell = ws.cell(row=row, column=col, value=float(previsto_mes))
+                previsto_mes_cell.number_format = '#,##0.00'
+                previsto_mes_cell.font = Font(bold=True, color="FFFFFF")
+                previsto_mes_cell.alignment = right_align
+                previsto_mes_cell.border = border
+                if previsto_mes > ano_ant_mes:
+                    previsto_mes_cell.fill = PatternFill(start_color="FF8C00", end_color="FF8C00", fill_type="solid")  # Laranja escuro
+                else:
+                    previsto_mes_cell.fill = PatternFill(start_color="E74C3C", end_color="C0392B", fill_type="solid")
+                col += 1
+                
+                # Realizado Mensal - aplicar cor verde ou vermelho
+                realizado_mes_cell = ws.cell(row=row, column=col, value=float(realizado_mes))
+                realizado_mes_cell.number_format = '#,##0.00'
+                realizado_mes_cell.font = Font(bold=True, color="FFFFFF")
+                realizado_mes_cell.alignment = right_align
+                realizado_mes_cell.border = border
+                if realizado_mes > previsto_mes:
+                    realizado_mes_cell.fill = PatternFill(start_color="8B0000", end_color="8B0000", fill_type="solid")  # Vermelho escuro
+                elif realizado_mes < previsto_mes:
+                    realizado_mes_cell.fill = PatternFill(start_color="006400", end_color="006400", fill_type="solid")  # Verde escuro
+                else:
+                    realizado_mes_cell.fill = PatternFill(start_color="E74C3C", end_color="C0392B", fill_type="solid")
+                col += 1
+            
+            # Totais anuais gerais
+            ano_ant_total = totalizador_geral.get('ano_anterior_total', 0) or 0
+            previsto_total = totalizador_geral.get('previsto_total', 0) or 0
+            realizado_total = totalizador_geral.get('realizado_total', 0) or 0
+            
+            # Ano Anterior Total
+            ws.cell(row=row, column=col, value=float(ano_ant_total)).number_format = '#,##0.00'
+            ws.cell(row=row, column=col).fill = PatternFill(start_color="0070C0", end_color="0070C0", fill_type="solid")
+            ws.cell(row=row, column=col).font = Font(bold=True, color="FFFFFF")
+            ws.cell(row=row, column=col).alignment = right_align
+            ws.cell(row=row, column=col).border = border
+            col += 1
+            
+            # Previsto Total - aplicar cor laranja se previsto > ano_anterior
+            previsto_total_cell = ws.cell(row=row, column=col, value=float(previsto_total))
+            previsto_total_cell.number_format = '#,##0.00'
+            previsto_total_cell.font = Font(bold=True, color="FFFFFF")
+            previsto_total_cell.alignment = right_align
+            previsto_total_cell.border = border
+            if previsto_total > ano_ant_total:
+                previsto_total_cell.fill = PatternFill(start_color="FFA500", end_color="FFA500", fill_type="solid")  # Laranja
+            else:
+                previsto_total_cell.fill = PatternFill(start_color="0070C0", end_color="0070C0", fill_type="solid")
+            col += 1
+            
+            # Realizado Total - aplicar cor verde ou vermelho
+            realizado_total_cell = ws.cell(row=row, column=col, value=float(realizado_total))
+            realizado_total_cell.number_format = '#,##0.00'
+            realizado_total_cell.font = Font(bold=True, color="FFFFFF")
+            realizado_total_cell.alignment = right_align
+            realizado_total_cell.border = border
+            if realizado_total > previsto_total:
+                realizado_total_cell.fill = PatternFill(start_color="DC143C", end_color="DC143C", fill_type="solid")  # Vermelho
+            elif realizado_total < previsto_total:
+                realizado_total_cell.fill = PatternFill(start_color="228B22", end_color="228B22", fill_type="solid")  # Verde
+            else:
+                realizado_total_cell.fill = PatternFill(start_color="0070C0", end_color="0070C0", fill_type="solid")
+            col += 1
+            row += 1
+    
+    # Ajustar largura das colunas
+    ws.column_dimensions['A'].width = 40
+    for i in range(2, 1 + len(meses_lista) * 3 + 4):
+        ws.column_dimensions[get_column_letter(i)].width = 15
+    
+    # Criar resposta HTTP
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    
+    response = HttpResponse(
+        output.getvalue(),
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = f'attachment; filename="controle_orcamento_{ano}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx"'
+    
+    return response

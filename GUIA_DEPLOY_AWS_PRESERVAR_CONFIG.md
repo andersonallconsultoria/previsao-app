@@ -53,11 +53,26 @@ ssh -i "C:\Users\SeuUsuario\Downloads\minha-chave.pem" ubuntu@18.117.242.206
 
 **⚠️ CRÍTICO: Execute este passo ANTES de qualquer atualização!**
 
+O arquivo `usuarios_config.json` está **dentro do container Docker**, não no servidor. Precisamos copiá-lo do container para o servidor antes de fazer o backup.
+
 ```bash
 # Navegar até a pasta da aplicação
 cd ~/previsao-app
 
-# Verificar se o arquivo existe
+# Verificar se os containers estão rodando
+docker-compose ps
+
+# Identificar o nome do container (geralmente é 'previsao-app-web-1')
+CONTAINER_NAME=$(docker-compose ps -q web)
+# Ou use diretamente: CONTAINER_NAME="previsao-app-web-1"
+
+# Verificar se o arquivo existe dentro do container
+docker exec $CONTAINER_NAME ls -la /app/usuarios_config.json
+
+# Se o arquivo existir, copiar do container para o servidor
+docker cp $CONTAINER_NAME:/app/usuarios_config.json ~/previsao-app/usuarios_config.json
+
+# Verificar se foi copiado
 ls -la usuarios_config.json
 
 # Fazer backup do arquivo (criar uma cópia com timestamp)
@@ -71,6 +86,8 @@ cat usuarios_config.json
 ```
 
 **📝 Anote o caminho do backup criado** (exemplo: `usuarios_config.json.backup.20250116_143022`)
+
+**⚠️ NOTA:** Se o arquivo não existir no container, significa que ainda não foi criado (primeira execução). Neste caso, você pode pular o backup e o arquivo será criado automaticamente quando necessário.
 
 ---
 
@@ -262,14 +279,17 @@ services:
 
 **Solução:**
 ```bash
-# Verificar se o arquivo existe no servidor
-ls -la ~/previsao-app/usuarios_config.json.backup.*
+# Se o arquivo não existe no container, pode ser a primeira execução
+# Neste caso, o arquivo será criado automaticamente quando necessário
 
-# Copiar novamente para o container
+# Se você tem um backup no servidor, restaurar:
 docker cp usuarios_config.json.backup.20250116_143022 previsao-app-web-1:/app/usuarios_config.json
 
 # Verificar se foi copiado
 docker exec previsao-app-web-1 ls -la /app/usuarios_config.json
+
+# Se não tiver backup e o arquivo não existir, ele será criado automaticamente
+# na primeira vez que alguém acessar a tela de Configuração de Usuários
 ```
 
 ### ❌ Erro: "Permission denied" ao copiar arquivo
@@ -328,7 +348,9 @@ git push origin main
 # 3. No servidor AWS (via SSH)
 cd ~/previsao-app
 
-# 3.1. BACKUP CRÍTICO
+# 3.1. BACKUP CRÍTICO (copiar do container primeiro)
+CONTAINER_NAME=$(docker-compose ps -q web)
+docker cp $CONTAINER_NAME:/app/usuarios_config.json ~/previsao-app/usuarios_config.json
 cp usuarios_config.json usuarios_config.json.backup.$(date +%Y%m%d_%H%M%S)
 
 # 3.2. Deploy

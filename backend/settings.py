@@ -93,6 +93,8 @@ STATICFILES_DIRS = [static_dir] if os.path.exists(static_dir) else []
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # LOGGING detalhado com console (e opcional em arquivo)
+# Nível de log configurável via variável de ambiente (INFO em produção, DEBUG em desenvolvimento)
+LOG_LEVEL = config('LOG_LEVEL', default='INFO' if not DEBUG else 'DEBUG')
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
@@ -120,7 +122,7 @@ LOGGING = {
     },
     'root': {
         'handlers': ['console'],  # ou ['console', 'file']
-        'level': 'DEBUG',
+        'level': LOG_LEVEL,
     },
     'loggers': {
         'django': {
@@ -130,7 +132,7 @@ LOGGING = {
         },
         '': {
             'handlers': ['console'],  # ou ['console', 'file']
-            'level': 'DEBUG',
+            'level': LOG_LEVEL,
         },
     },
 }

@@ -47,7 +47,8 @@ def get_dynamic_config(key, default=None):
                         if line and not line.startswith('#') and '=' in line:
                             k, v = line.split('=', 1)
                             _config_cache[k] = v
-                            logger.debug(f"📝 Config carregada: {k}={v}")
+                            if logger.isEnabledFor(logging.DEBUG):
+                                logger.debug(f"📝 Config carregada: {k}={v}")
             
             # Se ainda não encontrou, usa o config padrão
             if key not in _config_cache:
@@ -417,9 +418,15 @@ def painel_view(request):
                 logger.info(f"📦 Lista de empresas encontradas: {list(agrupado_por_empresa.keys())}")
                 for empresa, contas in agrupado_por_empresa.items():
                     logger.info(f"🏢 Empresa: '{empresa}' | Total de contas: {len(contas)}")
-                    for conta, meses in contas.items():
-                        for mes, valores in meses.items():
-                            logger.debug(f"📌 Empresa: {empresa} | Conta: {conta} | Mês: {mes} | Dados: {valores}")
+                    # Log DEBUG apenas se habilitado e para primeiros itens (evitar sobrecarga)
+                    if logger.isEnabledFor(logging.DEBUG):
+                        count = 0
+                        for conta, meses in contas.items():
+                            if count >= 3:  # Limitar a 3 contas
+                                break
+                            for mes, valores in list(meses.items())[:3]:  # Limitar a 3 meses por conta
+                                logger.debug(f"📌 Empresa: {empresa} | Conta: {conta} | Mês: {mes} | Dados: {valores}")
+                            count += 1
                 
                 logger.info(f"📦 Totalizadores por centro: {len(totalizadores_centro)}")
                 logger.info(f"📦 Totalizadores por empresa: {len(totalizadores_empresa)}")
@@ -514,8 +521,8 @@ def agrupar_resultados(dados, agrupar_por_centro=False, agrupar_por_empresa=Fals
             item.get("EMPRESA_NOME") or
             (f"{item.get('idempresa', item.get('IDEMPRESA', ''))} - {item.get('empresaNome', item.get('EMPRESA_NOME', 'Empresa'))}" if item.get('idempresa') or item.get('IDEMPRESA') else "Empresa não identificada")
         )
-        # Log para debug
-        if agrupar_por_empresa and len(agrupado_por_empresa_dict) <= 3:
+        # Log para debug (apenas se DEBUG estiver habilitado)
+        if logger.isEnabledFor(logging.DEBUG) and agrupar_por_empresa and len(agrupado_por_empresa_dict) <= 3:
             logger.debug(f"🏢 Campo empresa encontrado: {empresa_info} | idempresa: {item.get('idempresa')} | empresa: {item.get('empresa')}")
 
         # Validação dos dados obrigatórios
@@ -591,8 +598,8 @@ def agrupar_resultados(dados, agrupar_por_centro=False, agrupar_por_empresa=Fals
                     totais_anuais_conta[conta]["previsto_total"] += previsto
                     totais_anuais_conta[conta]["realizado_total"] += realizado
 
-            # Log para debug da estrutura dos dados
-            if (len(agrupado) <= 3 if not agrupar_por_centro and not agrupar_por_empresa else len(agrupado_por_centro) <= 3 if agrupar_por_centro else len(agrupado_por_empresa_dict) <= 3):
+            # Log para debug da estrutura dos dados (apenas se DEBUG estiver habilitado e para primeiros itens)
+            if logger.isEnabledFor(logging.DEBUG) and (len(agrupado) <= 3 if not agrupar_por_centro and not agrupar_por_empresa else len(agrupado_por_centro) <= 3 if agrupar_por_centro else len(agrupado_por_empresa_dict) <= 3):
                 logger.debug(f"🔍 Item processado - Empresa: {empresa_info}, Conta: {conta}, Centro: {centro_resultado}, Mês: {mes}")
                 logger.debug(f"🔍 Chaves disponíveis no item: {list(item.keys())}")
                 logger.debug(f"🔍 Campo centro_resultado encontrado: {centro_resultado}")

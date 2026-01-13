@@ -37,4 +37,7 @@ USER appuser
 EXPOSE 8000
 
 # Comando para rodar com Gunicorn
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "3", "backend.wsgi:application"] 
+# --timeout: aumenta timeout para 300 segundos (5 minutos) para processar grandes volumes de dados
+# --max-requests: reinicia workers após 1000 requisições para evitar vazamentos de memória
+# --max-requests-jitter: adiciona variação aleatória para evitar que todos os workers reiniciem ao mesmo tempo
+CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "3", "--timeout", "300", "--max-requests", "1000", "--max-requests-jitter", "50", "backend.wsgi:application"] 

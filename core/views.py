@@ -73,6 +73,55 @@ def log_json_pretty(obj, title=None):
     else:
         logger.info(json.dumps(obj, indent=2, ensure_ascii=False))
 
+# =====================================================================
+# Service account: todas as chamadas à API CISS-Poder usam um único
+# token gerado com credenciais fixas do .env (SERVICE_USERNAME/PASSWORD).
+# O controle de acesso por usuário é feito no Django via usuarios_config.json,
+# então não precisamos cadastrar permissão por usuário no CISS-Poder.
+# =====================================================================
+
+_service_token_cache = {"token": None, "ts": 0}
+_SERVICE_TOKEN_TTL_SEG = 3500  # ~58 min (OAuth normalmente expira em 1h)
+
+
+def get_service_token(force_refresh=False):
+    """Retorna um Bearer token válido para chamar a API CISS-Poder.
+
+    Usa credenciais fixas do .env (SERVICE_USERNAME/SERVICE_PASSWORD).
+    Cacheia o token em memória até o TTL expirar; renova automaticamente.
+    """
+    import time as _t
+    agora = _t.time()
+    if (not force_refresh
+            and _service_token_cache["token"]
+            and (agora - _service_token_cache["ts"]) < _SERVICE_TOKEN_TTL_SEG):
+        return _service_token_cache["token"]
+
+    username = get_dynamic_config('API_USERNAME')
+    password = get_dynamic_config('API_PASSWORD')
+    if not username or not password:
+        logger.error("❌ API_USERNAME/API_PASSWORD não configurados no .env")
+        return None
+
+    token_data = gerar_token(username, password)
+    if 'access_token' in token_data:
+        _service_token_cache["token"] = token_data['access_token']
+        _service_token_cache["ts"] = agora
+        logger.info(f"🔑 Service token renovado para usuário '{username}'")
+        return token_data['access_token']
+
+    logger.error(f"❌ Falha ao gerar service token: {token_data}")
+    return None
+
+
+def get_api_headers():
+    """Headers padrão para chamar qualquer endpoint do CISS-Poder."""
+    return {
+        'Authorization': f"Bearer {get_service_token()}",
+        'Content-Type': 'application/json',
+    }
+
+
 # Token OAuth2
 def gerar_token(username, password):
     url = f"{get_dynamic_config('API_BASE_URL')}/cisspoder-auth/oauth/token"
@@ -152,11 +201,7 @@ def login_view(request):
 # Painel principal
 @token_required
 def painel_view(request):
-    token = request.session['token']
-    headers = {
-        'Authorization': f"Bearer {token}",
-        'Content-Type': 'application/json'
-    }
+    headers = get_api_headers()
 
     username = request.session.get('username', '')
     centros_permitidos_ids = get_centros_permitidos(username)
@@ -656,11 +701,7 @@ def debug_resultados_view(request):
 # Tela de configuração
 @token_required
 def configuracao_view(request):
-    token = request.session['token']
-    headers = {
-        'Authorization': f"Bearer {token}",
-        'Content-Type': 'application/json'
-    }
+    headers = get_api_headers()
 
     def post_api(endpoint, use_pagination=False):
         url = f"{get_dynamic_config('API_BASE_URL')}/cisspoder-service/{endpoint}"
@@ -739,10 +780,7 @@ def get_anocadastro(request):
 @token_required
 def salvar_configuracao(request):
     if request.method == 'POST':
-        headers = {
-            'Authorization': f"Bearer {request.session['token']}",
-            'Content-Type': 'application/json'
-        }
+        headers = get_api_headers()
 
         # Verifica se é uma ação de exclusão
         acao = request.POST.get("acao", "I")  # I = INSERT/UPDATE, D = DELETE
@@ -818,10 +856,7 @@ def salvar_configuracao(request):
 @token_required
 def atualizar_configuracao(request):
     if request.method == 'POST':
-        headers = {
-            'Authorization': f"Bearer {request.session['token']}",
-            'Content-Type': 'application/json'
-        }
+        headers = get_api_headers()
 
         dados = {
             "IN_IDEEMPPREVISAO": int(request.POST["empresa"]),
@@ -857,15 +892,11 @@ def buscar_configuracoes_ajax(request):
     if request.method != 'GET':
         return JsonResponse({'success': False, 'message': 'Método não permitido'}, status=405)
     
-    token = request.session.get('token')
-    if not token:
+    if not request.session.get('username'):
         return JsonResponse({'success': False, 'message': 'Não autenticado'}, status=401)
-    
-    headers = {
-        'Authorization': f"Bearer {token}",
-        'Content-Type': 'application/json'
-    }
-    
+
+    headers = get_api_headers()
+
     # Obter filtros da query string
     ano_filter = request.GET.get('ano', '').strip()
     empresa_filter = request.GET.get('empresa', '').strip()
@@ -1243,30 +1274,23 @@ def configuracao_usuarios_view(request):
         return redirect('painel')
     
     # Buscar centros de resultados para permitir vinculação
-    token = request.session.get('token')
     centros = []
-    if token:
-        headers = {
-            'Authorization': f"Bearer {token}",
-            'Content-Type': 'application/json'
-        }
-        centros_map = {}
-        try:
-            url = f"{get_dynamic_config('API_BASE_URL')}/cisspoder-service/cadastro_centroresultados"
-            resp = requests.post(url, json={"limit": 1000, "page": 1}, headers=headers, timeout=10)
-            if resp.status_code == 200:
-                centros = resp.json().get("data", [])
-                for c in centros:
-                    try:
-                        centros_map[int(c.get("idcentroresultado"))] = c.get("centroresultados")
-                    except Exception:
-                        continue
-            else:
-                logger.warning(f"⚠️ cadastro_centroresultados retornou {resp.status_code}")
-        except Exception:
-            logger.exception("❌ Erro ao buscar centros de resultados para configuração de usuários")
-    else:
-        centros_map = {}
+    centros_map = {}
+    headers = get_api_headers()
+    try:
+        url = f"{get_dynamic_config('API_BASE_URL')}/cisspoder-service/cadastro_centroresultados"
+        resp = requests.post(url, json={"limit": 1000, "page": 1}, headers=headers, timeout=10)
+        if resp.status_code == 200:
+            centros = resp.json().get("data", [])
+            for c in centros:
+                try:
+                    centros_map[int(c.get("idcentroresultado"))] = c.get("centroresultados")
+                except Exception:
+                    continue
+        else:
+            logger.warning(f"⚠️ cadastro_centroresultados retornou {resp.status_code}")
+    except Exception:
+        logger.exception("❌ Erro ao buscar centros de resultados para configuração de usuários")
     
     config_data = get_usuarios_config()
     usuarios_admin = config_data.get('usuarios_admin', [])
@@ -1486,11 +1510,7 @@ def exportar_excel_view(request):
     centro = request.GET.get('centro') or request.POST.get('centro') or None
     
     # Buscar nome do centro e empresa para exibir no Excel
-    token = request.session.get('token')
-    headers = {
-        'Authorization': f"Bearer {token}",
-        'Content-Type': 'application/json'
-    }
+    headers = get_api_headers()
     
     def post_api(endpoint):
         url = f"{get_dynamic_config('API_BASE_URL')}/cisspoder-service/{endpoint}"
@@ -1559,11 +1579,7 @@ def exportar_excel_view(request):
     else:
         # Fallback: buscar dados da API (caso não tenha dados na sessão)
         logger.info("⚠️ Dados da sessão não encontrados ou filtros diferentes - buscando da API")
-        token = request.session['token']
-        headers = {
-            'Authorization': f"Bearer {token}",
-            'Content-Type': 'application/json'
-        }
+        headers = get_api_headers()
         
         # Construir payload igual ao painel_view
         payload = {
@@ -2532,11 +2548,7 @@ def dre_view(request):
     centros_permitidos_ids = get_centros_permitidos(username)
     tem_lista_permitida = bool(centros_permitidos_ids)
 
-    token = request.session['token']
-    headers = {
-        'Authorization': f"Bearer {token}",
-        'Content-Type': 'application/json',
-    }
+    headers = get_api_headers()
 
     empresas = _get_lista_cached('empresas', 'cadastro_empresa', headers)
     centros = _get_lista_cached('centros', 'cadastro_centroresultados', headers)

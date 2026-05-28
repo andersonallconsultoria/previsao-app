@@ -67,12 +67,50 @@ jobs:
             echo ""
 
             echo "============================================================"
-            echo "5. LOGS RECENTES DO CONTAINER (filtrando token/erro)"
+            echo "5. TESTE REAL: chamar endpoints com o token do service account"
+            echo "============================================================"
+            docker exec previsao-app-web-1 python -c "
+            import requests
+            from core.views import get_service_token, get_dynamic_config, _service_token_cache
+            _service_token_cache['token'] = None
+            t = get_service_token(force_refresh=True)
+            base = get_dynamic_config('API_BASE_URL')
+            headers = {'Authorization': f'Bearer {t}', 'Content-Type': 'application/json'}
+            endpoints = [
+                ('centro_resultado_bi_dre', {'page':1,'limit':1,'clausulas':[
+                    {'campo':'anoreferencia','operadorlogico':'AND','operador':'IGUAL','valor':2026},
+                    {'campo':'mesinicial','operadorlogico':'AND','operador':'IGUAL','valor':5},
+                    {'campo':'mesfinal','operadorlogico':'AND','operador':'IGUAL','valor':5},
+                    {'campo':'idempfiltro','operadorlogico':'AND','operador':'IGUAL','valor':None},
+                    {'campo':'idcentroresultadofiltro','operadorlogico':'AND','operador':'IGUAL','valor':None},
+                ]}),
+                ('centro_resultado_bi', {'page':1,'limit':1,'clausulas':[
+                    {'campo':'anoreferencia','operadorlogico':'AND','operador':'IGUAL','valor':2026},
+                    {'campo':'idempfiltro','operadorlogico':'AND','operador':'IGUAL','valor':None},
+                    {'campo':'idcentroresultadofiltro','operadorlogico':'AND','operador':'IGUAL','valor':None},
+                ]}),
+                ('cadastro_empresa', {'page':1}),
+                ('cadastro_centroresultados', {'page':1}),
+                ('cadastro_contabil', {'page':1}),
+                ('centroresultado_config', {'page':1,'limit':1,'clausulas':[{'campo':'anocadastro','operadorlogico':'AND','operador':'IGUAL','valor':2026}]}),
+            ]
+            for ep, payload in endpoints:
+                try:
+                    r = requests.post(f'{base}/cisspoder-service/{ep}', json=payload, headers=headers, timeout=30)
+                    status = '✅ OK' if r.status_code == 200 else ('❌ SEM PERMISSAO' if r.status_code == 403 else f'⚠️ {r.status_code}')
+                    print(f'{status}  {ep:<35} -> HTTP {r.status_code}')
+                except Exception as e:
+                    print(f'❌ ERRO     {ep:<35} -> {type(e).__name__}: {e}')
+            "
+            echo ""
+
+            echo "============================================================"
+            echo "6. LOGS RECENTES DO CONTAINER (filtrando token/erro)"
             echo "============================================================"
             docker logs previsao-app-web-1 --tail=200 2>&1 | grep -iE "service token|api_username|gerar_token|access_token|403|401|❌" | tail -30
             echo ""
 
             echo "============================================================"
-            echo "6. CONTAINER STATUS"
+            echo "7. CONTAINER STATUS"
             echo "============================================================"
             docker ps --filter "name=previsao-app" --format "table {{.Names}}\t{{.Status}}\t{{.Image}}"

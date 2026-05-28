@@ -1,0 +1,85 @@
+name: Restore usuarios_config.json
+
+# Workflow manual — você dispara pelo botão "Run workflow" na aba Actions.
+# Restaura o usuarios_config.json a partir de um backup definido no input.
+# Por padrão usa o backup completo de 28/05/2026 (versão de produção com
+# todos os usuários e centros vinculados) e reinjeta a chave nova
+# "usuarios_aprovador_liberacao" sem perder ninguém.
+
+on:
+  workflow_dispatch:
+    inputs:
+      backup_path:
+        description: 'Caminho absoluto do backup no EC2 (deixe em branco para usar o default)'
+        required: false
+        default: '/home/ubuntu/backups/20260528_144800/usuarios_config.container.bkp'
+      aprovador_inicial:
+        description: 'Usuário admin inicial para usuarios_aprovador_liberacao'
+        required: false
+        default: 'ANDERSON.SANTOS'
+
+jobs:
+  restore:
+    name: Restore via SSH
+    runs-on: ubuntu-latest
+    steps:
+      - name: Restore usuarios_config.json no EC2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: 22
+          command_timeout: 5m
+          envs: BACKUP_PATH,APROVADOR
+          script: |
+            set -e
+            cd ${{ secrets.EC2_PATH }}
+
+            BACKUP_PATH="${{ github.event.inputs.backup_path }}"
+            APROVADOR="${{ github.event.inputs.aprovador_inicial }}"
+
+            echo "📋 Backup origem: $BACKUP_PATH"
+            echo "📋 Aprovador inicial: $APROVADOR"
+
+            if [ ! -f "$BACKUP_PATH" ]; then
+              echo "❌ Backup não encontrado em $BACKUP_PATH"
+              echo "📂 Backups disponíveis em ~/backups/:"
+              ls -la ~/backups/ 2>/dev/null || true
+              exit 1
+            fi
+
+            echo "🛡️ Salvando estado atual antes de restaurar..."
+            cp usuarios_config.json "usuarios_config.json.PRE_RESTORE.$(date +%Y%m%d_%H%M%S)" 2>/dev/null || true
+
+            echo "🔄 Restaurando do backup + reinjetando usuarios_aprovador_liberacao..."
+            python3 <<PYEOF
+            import json
+            src = "$BACKUP_PATH"
+            dst = "./usuarios_config.json"
+            aprovador = "$APROVADOR"
+
+            with open(src, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            if "usuarios_aprovador_liberacao" not in data:
+                new_data = {}
+                for k, v in data.items():
+                    new_data[k] = v
+                    if k == "usuarios_admin":
+                        new_data["usuarios_aprovador_liberacao"] = [aprovador]
+                data = new_data
+
+            with open(dst, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+
+            print("OK - usuarios_admin:", data.get("usuarios_admin"))
+            print("OK - aprovadores:", data.get("usuarios_aprovador_liberacao"))
+            print("OK - usuarios com vinculos de centros:", len(data.get("usuarios_centros", {})))
+            print("OK - lista de usuarios com centros:", list(data.get("usuarios_centros", {}).keys()))
+            PYEOF
+
+            echo "📏 Tamanho do arquivo restaurado:"
+            ls -la usuarios_config.json
+
+            echo "✅ Restore concluído. Container vai ler o arquivo atualizado automaticamente (volume montado)."

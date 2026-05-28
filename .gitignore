@@ -3,3 +3,4 @@ __pycache__/
 .env
 db.sqlite3
 venv/
+.claude/settings.local.json

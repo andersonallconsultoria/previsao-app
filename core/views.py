@@ -221,10 +221,9 @@ def painel_view(request):
                 'sem_centros_permitidos': sem_centros_permitidos,
                 'mensagem_bloqueio': mensagem_bloqueio,
                 'tem_lista_permitida': tem_lista_permitida,
-                'tem_lista_permitida': tem_lista_permitida,
             })
 
-        ano = int(request.POST.get("ano", 2025))
+        ano = int(request.POST.get("ano") or ano_atual)
         empresa = request.POST.get("empresa") or None
         centro = request.POST.get("centro") or None
 
@@ -368,7 +367,8 @@ def painel_view(request):
                     logger.warning(f"⚠️ Erro na página {page}: {resp.text}")
                     break
             
-            request.session['resultados_debug'] = resultados
+            # Amostra para a tela de debug — guardar lista inteira na sessão estoura cookie/DB
+            request.session['resultados_debug'] = resultados[:50]
             logger.info(f"✅ Total final de registros: {len(resultados)}")
             log_json_pretty(resultados[:3], "📊 Primeiros resultados:")
             
@@ -1207,6 +1207,15 @@ def usuario_tem_acesso_configuracao(username):
     usuarios_config = [u.upper() for u in config_data.get('usuarios_config', [])]
     return username.upper() in usuarios_config
 
+
+def usuario_pode_aprovar_liberacao(username):
+    """Verifica se o usuário pode aprovar/recusar solicitações de liberação de excedente"""
+    if not username:
+        return False
+    config_data = get_usuarios_config()
+    aprovadores = [u.upper() for u in config_data.get('usuarios_aprovador_liberacao', [])]
+    return username.upper() in aprovadores
+
 def get_centros_permitidos(username):
     """Retorna lista de IDs de centros permitidos para o usuário"""
     if not username:
@@ -1262,19 +1271,21 @@ def configuracao_usuarios_view(request):
     config_data = get_usuarios_config()
     usuarios_admin = config_data.get('usuarios_admin', [])
     usuarios_config = config_data.get('usuarios_config', [])
+    usuarios_aprovador_liberacao = config_data.get('usuarios_aprovador_liberacao', [])
     usuarios_centros = config_data.get('usuarios_centros', {})
     usuarios_centros_nomes = {
         user: [centros_map.get(int(cid), str(cid)) for cid in (centros or [])]
         for user, centros in usuarios_centros.items()
     }
-    
+
     # Buscar mensagens da sessão
     success_message = request.session.pop('success_message', None)
     error_message = request.session.pop('error_message', None)
-    
+
     return render(request, 'configuracao_usuarios.html', {
         'usuarios_admin': usuarios_admin,
         'usuarios_config': usuarios_config,
+        'usuarios_aprovador_liberacao': usuarios_aprovador_liberacao,
         'usuarios_centros': usuarios_centros,
         'usuarios_centros_nomes': usuarios_centros_nomes,
         'centros': centros,
@@ -1374,6 +1385,47 @@ def gerenciar_usuarios_config(request):
                 return JsonResponse({'success': False, 'message': 'Usuário não encontrado na lista'})
     
     return JsonResponse({'success': False, 'message': 'Método não permitido'}, status=405)
+
+# View para adicionar/remover aprovadores de liberação de excedente
+@token_required
+def gerenciar_usuarios_aprovador_liberacao(request):
+    """Adiciona ou remove usuários que podem aprovar/recusar solicitações de liberação de excedente"""
+    username = request.session.get('username', '')
+
+    if not usuario_pode_gerenciar_usuarios(username):
+        return JsonResponse({'success': False, 'message': 'Acesso negado'}, status=403)
+
+    if request.method == 'POST':
+        acao = request.POST.get('acao')  # 'adicionar' ou 'remover'
+        usuario = request.POST.get('usuario', '').strip().upper()
+
+        if not usuario:
+            return JsonResponse({'success': False, 'message': 'Nome do usuário é obrigatório'})
+
+        config_data = get_usuarios_config()
+        lista = config_data.get('usuarios_aprovador_liberacao', [])
+        lista_upper = [u.upper() for u in lista]
+
+        if acao == 'adicionar':
+            if usuario in lista_upper:
+                return JsonResponse({'success': False, 'message': 'Usuário já é aprovador'})
+            lista.append(usuario)
+            config_data['usuarios_aprovador_liberacao'] = lista
+            if save_usuarios_config(config_data):
+                return JsonResponse({'success': True, 'message': f'{usuario} agora pode aprovar liberações'})
+            return JsonResponse({'success': False, 'message': 'Erro ao salvar configuração'})
+
+        elif acao == 'remover':
+            if usuario not in lista_upper:
+                return JsonResponse({'success': False, 'message': 'Usuário não está na lista'})
+            lista = [u for u in lista if u.upper() != usuario]
+            config_data['usuarios_aprovador_liberacao'] = lista
+            if save_usuarios_config(config_data):
+                return JsonResponse({'success': True, 'message': f'{usuario} não é mais aprovador'})
+            return JsonResponse({'success': False, 'message': 'Erro ao salvar configuração'})
+
+    return JsonResponse({'success': False, 'message': 'Método não permitido'}, status=405)
+
 
 # View para gerenciar vínculo usuário -> centros
 @token_required
@@ -2421,5 +2473,251 @@ def exportar_excel_view(request):
         content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     )
     response['Content-Disposition'] = f'attachment; filename="controle_orcamento_{ano}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx"'
-    
+
     return response
+
+
+# ==================== DRE (Demonstrativo de Resultado do Exercício) ====================
+
+# Cache em memória das listas auxiliares (empresas/centros). Estas listas
+# mudam raramente, mas o endpoint da CISS-Poder é lento - cachear evita
+# duas chamadas HTTP a cada page load.
+_LISTAS_CACHE_TTL_SEG = 3600  # 1 hora
+_listas_cache = {"empresas": {"data": None, "ts": 0}, "centros": {"data": None, "ts": 0}}
+
+# Cache dos dados financeiros da DRE por chave ano|empresa|centro (TTL 5 min)
+_DRE_DADOS_TTL_SEG = 300
+_dre_dados_cache = {}
+
+
+def _get_lista_cached(nome_cache, endpoint, headers, force_refresh=False):
+    """Retorna a lista auxiliar do cache, ou busca da API se expirado."""
+    import time
+    entry = _listas_cache.get(nome_cache, {"data": None, "ts": 0})
+    agora = time.time()
+    if (not force_refresh
+            and entry["data"] is not None
+            and (agora - entry["ts"]) < _LISTAS_CACHE_TTL_SEG):
+        logger.info(f"📦 {nome_cache}: cache HIT ({len(entry['data'])} itens, {int(agora - entry['ts'])}s de idade)")
+        return entry["data"]
+
+    url = f"{get_dynamic_config('API_BASE_URL')}/cisspoder-service/{endpoint}"
+    t0 = time.time()
+    try:
+        resp = requests.post(url, json={"page": 1}, headers=headers, timeout=60)
+        elapsed = time.time() - t0
+        if resp.status_code == 200:
+            data = resp.json().get("data", [])
+            _listas_cache[nome_cache] = {"data": data, "ts": agora}
+            logger.info(f"🌐 {nome_cache}: cache MISS - API respondeu em {elapsed:.2f}s ({len(data)} itens)")
+            return data
+        logger.warning(f"⚠️ {nome_cache}: API retornou {resp.status_code} em {elapsed:.2f}s")
+    except Exception:
+        logger.exception(f"❌ {nome_cache}: erro ao buscar (após {time.time() - t0:.2f}s)")
+    return entry["data"] or []
+
+
+@token_required
+def dre_view(request):
+    """Tela DRE: classifica os dados de centro_resultado_bi pela estrutura
+    contábil padrão (core/dre_config.py) e exibe linhas + subtotais.
+
+    Por enquanto usa dados mockados. Quando o serviço real for plugado,
+    substituir a chamada a gerar_dados_mock pela chamada à API."""
+    from datetime import date
+    from .dre_service import montar_dre, gerar_dados_mock, _meses_do_periodo
+    from .dre_config import get_estrutura_dre
+
+    username = request.session.get('username', '')
+    centros_permitidos_ids = get_centros_permitidos(username)
+    tem_lista_permitida = bool(centros_permitidos_ids)
+
+    token = request.session['token']
+    headers = {
+        'Authorization': f"Bearer {token}",
+        'Content-Type': 'application/json',
+    }
+
+    empresas = _get_lista_cached('empresas', 'cadastro_empresa', headers)
+    centros = _get_lista_cached('centros', 'cadastro_centroresultados', headers)
+
+    if tem_lista_permitida:
+        centros = [
+            c for c in centros
+            if c.get('idcentroresultado') and int(c.get('idcentroresultado')) in centros_permitidos_ids
+        ]
+
+    hoje = datetime.now()
+    ano_atual = hoje.year
+    ano = int(request.GET.get('ano') or request.POST.get('ano') or ano_atual)
+    empresa = request.GET.get('empresa') or request.POST.get('empresa') or ''
+    centro = request.GET.get('centro') or request.POST.get('centro') or ''
+    # Default: dia 1 do mês corrente até o dia de hoje.
+    dt_ini_str = request.GET.get('dt_ini') or request.POST.get('dt_ini') or f"{ano}-{hoje.month:02d}-01"
+    dt_fim_str = request.GET.get('dt_fim') or request.POST.get('dt_fim') or hoje.strftime("%Y-%m-%d")
+    vista = (request.GET.get('vista') or request.POST.get('vista') or 'meses').lower()
+    if vista not in ('meses', 'totais'):
+        vista = 'meses'
+
+    # Validar permissão de centro
+    if centro and tem_lista_permitida:
+        try:
+            if int(centro) not in centros_permitidos_ids:
+                return HttpResponse("Você não tem permissão para acessar este centro de resultado.", status=403)
+        except ValueError:
+            centro = ''
+
+    # Parse datas
+    try:
+        dt_ini = date.fromisoformat(dt_ini_str)
+    except ValueError:
+        dt_ini = date(ano, 1, 1)
+    try:
+        dt_fim = date.fromisoformat(dt_fim_str)
+    except ValueError:
+        dt_fim = date(ano, 12, 31)
+    if dt_ini > dt_fim:
+        dt_ini, dt_fim = dt_fim, dt_ini
+
+    meses = _meses_do_periodo(dt_ini, dt_fim)
+
+    # Só consulta a API quando o usuário clicar em Pesquisar (form submit com pesquisar=1).
+    # Primeira visita à tela = só renderiza filtros vazios.
+    pesquisar = request.GET.get('pesquisar') or request.POST.get('pesquisar')
+    if not pesquisar:
+        return render(request, 'dre.html', {
+            'empresas': empresas,
+            'centros': centros,
+            'ano': ano,
+            'ano_atual': ano_atual,
+            'empresa': empresa,
+            'centro': centro,
+            'dt_ini': dt_ini.isoformat(),
+            'dt_fim': dt_fim.isoformat(),
+            'vista': vista,
+            'linhas': [],
+            'meses': meses,
+            'contas_sem_classificacao': [],
+            'pode_gerenciar_usuarios': usuario_pode_gerenciar_usuarios(username),
+            'tem_acesso_configuracao': usuario_tem_acesso_configuracao(username),
+            'total_registros': 0,
+            'erro_api': None,
+            'consultou': False,
+        })
+
+    # Busca os dados no endpoint dedicado da DRE (function UF_CENTRORESULTADOS_DRE).
+    # Quando a function nova ainda não estiver publicada na API CISS-Poder,
+    # basta trocar DRE_ENDPOINT por 'centro_resultado_bi' no .env para usar a antiga.
+    DRE_ENDPOINT = get_dynamic_config('DRE_ENDPOINT', default='centro_resultado_bi_dre')
+
+    # Mês inicial e final extraídos do período selecionado (mesma chave de cache).
+    mes_inicial = dt_ini.month
+    mes_final = dt_fim.month
+
+    payload = {
+        "page": 1,
+        "limit": 1000,
+        "clausulas": [
+            {"campo": "anoreferencia", "operadorlogico": "AND", "operador": "IGUAL", "valor": ano},
+            {"campo": "mesinicial",    "operadorlogico": "AND", "operador": "IGUAL", "valor": mes_inicial},
+            {"campo": "mesfinal",      "operadorlogico": "AND", "operador": "IGUAL", "valor": mes_final},
+        ],
+    }
+    if empresa and str(empresa).strip():
+        try:
+            payload["clausulas"].append({
+                "campo": "idempfiltro", "operadorlogico": "AND",
+                "operador": "IGUAL", "valor": int(empresa),
+            })
+        except ValueError:
+            payload["clausulas"].append({
+                "campo": "idempfiltro", "operadorlogico": "AND",
+                "operador": "IGUAL", "valor": None,
+            })
+    else:
+        payload["clausulas"].append({
+            "campo": "idempfiltro", "operadorlogico": "AND",
+            "operador": "IGUAL", "valor": None,
+        })
+
+    if centro and str(centro).strip():
+        try:
+            payload["clausulas"].append({
+                "campo": "idcentroresultadofiltro", "operadorlogico": "AND",
+                "operador": "IGUAL", "valor": int(centro),
+            })
+        except ValueError:
+            payload["clausulas"].append({
+                "campo": "idcentroresultadofiltro", "operadorlogico": "AND",
+                "operador": "IGUAL", "valor": None,
+            })
+    else:
+        payload["clausulas"].append({
+            "campo": "idcentroresultadofiltro", "operadorlogico": "AND",
+            "operador": "IGUAL", "valor": None,
+        })
+
+    import time as _time
+    # Cache em memória dos dados financeiros - TTL 5 min.
+    # Como agora a function aceita filtro de mês, a chave do cache inclui o range.
+    cache_key = f"{ano}|{empresa or 'X'}|{centro or 'X'}|{mes_inicial}|{mes_final}"
+    cache_entry = _dre_dados_cache.get(cache_key)
+    agora_ts = _time.time()
+    dados_brutos = []
+    erro_api = None
+    if cache_entry and (agora_ts - cache_entry["ts"]) < _DRE_DADOS_TTL_SEG:
+        dados_brutos = cache_entry["dados"]
+        logger.info(f"📦 DRE - cache HIT [{cache_key}] {len(dados_brutos)} registros ({int(agora_ts - cache_entry['ts'])}s de idade)")
+    else:
+        url = f"{get_dynamic_config('API_BASE_URL')}/cisspoder-service/{DRE_ENDPOINT}"
+        t_total = _time.time()
+        try:
+            page = 1
+            while True:
+                payload["page"] = page
+                t0 = _time.time()
+                resp = requests.post(url, json=payload, headers=headers, timeout=120)
+                t_page = _time.time() - t0
+                if resp.status_code != 200:
+                    erro_api = f"API retornou status {resp.status_code}"
+                    logger.warning(f"⚠️ DRE - {erro_api} na página {page} ({t_page:.2f}s)")
+                    break
+                data = resp.json()
+                page_data = data.get("data", [])
+                dados_brutos.extend(page_data)
+                logger.info(f"📄 DRE - página {page}: {len(page_data)} registros em {t_page:.2f}s")
+                if not data.get("hasNext", False):
+                    break
+                page += 1
+            logger.info(f"📊 DRE - {len(dados_brutos)} registros totais em {_time.time() - t_total:.2f}s (ano={ano}, empresa={empresa or 'Todas'}, centro={centro or 'Todos'})")
+            if not erro_api:
+                _dre_dados_cache[cache_key] = {"dados": dados_brutos, "ts": agora_ts}
+        except Exception as e:
+            erro_api = str(e)
+            logger.exception(f"❌ DRE - erro ao buscar centro_resultado_bi (após {_time.time() - t_total:.2f}s)")
+
+    dre = montar_dre(dados_brutos, meses, estrutura=get_estrutura_dre())
+
+    pode_gerenciar_usuarios = usuario_pode_gerenciar_usuarios(username)
+    tem_acesso_configuracao = usuario_tem_acesso_configuracao(username)
+
+    context = {
+        'empresas': empresas,
+        'centros': centros,
+        'ano': ano,
+        'ano_atual': ano_atual,
+        'empresa': empresa,
+        'centro': centro,
+        'dt_ini': dt_ini.isoformat(),
+        'dt_fim': dt_fim.isoformat(),
+        'vista': vista,
+        'linhas': dre['linhas'],
+        'meses': dre['meses'],
+        'contas_sem_classificacao': dre['contas_sem_classificacao'],
+        'pode_gerenciar_usuarios': pode_gerenciar_usuarios,
+        'tem_acesso_configuracao': tem_acesso_configuracao,
+        'total_registros': len(dados_brutos),
+        'erro_api': erro_api,
+        'consultou': True,
+    }
+    return render(request, 'dre.html', context)

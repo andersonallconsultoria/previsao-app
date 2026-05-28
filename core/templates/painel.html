@@ -410,6 +410,7 @@
         {% if tem_acesso_configuracao %}
         <a href="{% url 'configuracao' %}" class="btn btn-success btn-sm ms-1">🔧 Configuração</a>
         {% endif %}
+        <a href="{% url 'dre' %}" class="btn btn-sm ms-1" style="background-color: #0f63ff !important; color: white !important;">📊 DRE</a>
         <button type="button" id="btn-exportar-excel" class="btn btn-info btn-sm ms-1" style="background-color: #17a2b8 !important; color: white !important; display: none;" {% if sem_centros_permitidos %}disabled{% endif %}>📊 Exportar para Excel</button>
         {% if pode_gerenciar_usuarios %}
         <a href="{% url 'configuracao_usuarios' %}" class="btn btn-info btn-sm ms-1">👥 Config. Usuários</a>

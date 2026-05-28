@@ -260,6 +260,49 @@
       </table>
     </div>
   </div>
+
+  <!-- Seção: Aprovadores de Liberação de Excedente -->
+  <div class="coe-section">
+    <h4 class="mb-3">✅ Usuários que podem aprovar Liberação de Excedente</h4>
+    <p class="text-white mb-3">
+      Estes usuários veem a fila de solicitações de liberação (quando uma conta passa do previsto) e podem liberar ou recusar.
+      Usuários fora desta lista podem apenas solicitar.
+    </p>
+
+    <div class="row g-2 mb-3">
+      <div class="col-md-6">
+        <label class="form-label">Nome do usuário</label>
+        <input type="text" id="usuario-aprov-input" class="form-control" placeholder="Ex: JOÃO.SANTOS" style="text-transform: uppercase;">
+      </div>
+      <div class="col-md-6 d-flex align-items-end">
+        <button type="button" class="btn btn-primary me-2" onclick="adicionarUsuarioAprov()">➕ Adicionar</button>
+      </div>
+    </div>
+
+    <div class="table-container">
+      <h5 class="mb-3">Aprovadores cadastrados:</h5>
+      <table class="table table-striped">
+        <thead>
+          <tr>
+            <th>Usuário</th>
+            <th style="width: 150px;">Ações</th>
+          </tr>
+        </thead>
+        <tbody id="tabela-aprov">
+          {% for usuario in usuarios_aprovador_liberacao %}
+          <tr id="aprov-{{ usuario }}">
+            <td>{{ usuario }}</td>
+            <td>
+              <button type="button" class="btn btn-danger btn-sm" onclick="removerUsuarioAprov('{{ usuario }}')">🗑️ Remover</button>
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="2">Nenhum aprovador cadastrado ainda.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
@@ -451,6 +494,64 @@
       adicionarUsuarioConfig();
     }
   });
+
+  function adicionarUsuarioAprov() {
+    const input = document.getElementById('usuario-aprov-input');
+    const usuario = input.value.trim().toUpperCase();
+    if (!usuario) { alert('Por favor, digite o nome do usuário'); return; }
+
+    const formData = new FormData();
+    formData.append('acao', 'adicionar');
+    formData.append('usuario', usuario);
+
+    fetch('{% url "gerenciar_usuarios_aprovador_liberacao" %}', {
+      method: 'POST',
+      body: formData,
+      headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.success) {
+        input.value = '';
+        location.reload();
+      } else {
+        alert('Erro: ' + data.message);
+      }
+    })
+    .catch(err => { console.error(err); alert('Erro ao adicionar aprovador'); });
+  }
+
+  function removerUsuarioAprov(usuario) {
+    if (!confirm(`Remover ${usuario} da lista de aprovadores?`)) return;
+
+    const formData = new FormData();
+    formData.append('acao', 'remover');
+    formData.append('usuario', usuario);
+
+    fetch('{% url "gerenciar_usuarios_aprovador_liberacao" %}', {
+      method: 'POST',
+      body: formData,
+      headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.success) {
+        const tr = document.getElementById(`aprov-${usuario}`);
+        if (tr) tr.remove();
+        location.reload();
+      } else {
+        alert('Erro: ' + data.message);
+      }
+    })
+    .catch(err => { console.error(err); alert('Erro ao remover aprovador'); });
+  }
+
+  const aprovInput = document.getElementById('usuario-aprov-input');
+  if (aprovInput) {
+    aprovInput.addEventListener('keypress', function(e) {
+      if (e.key === 'Enter') adicionarUsuarioAprov();
+    });
+  }
 
   function salvarUsuarioCentros() {
     const usuarioInput = document.getElementById('usuario-centro-input');

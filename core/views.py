@@ -2852,3 +2852,131 @@ def liberacao_count_ajax(request):
     if not usuario_pode_aprovar_liberacao(username):
         return JsonResponse({'count': 0})
     return JsonResponse({'count': liberacoes_service.count_pendentes()})
+
+
+# ==================== PAINEL V2 (NOVO LAYOUT - BETA) ====================
+
+@token_required
+def painel_v2_view(request):
+    """Nova versão do painel com cards de KPI, tabela com colunas colapsáveis
+    e painel lateral com análise contextual.
+
+    Mesma fonte de dados do painel atual (centro_resultado_bi).
+    Calcula no Python apenas o necessário pro template; cards e painel lateral
+    são derivados no JS a partir do dataset entregue.
+    """
+    headers = get_api_headers()
+    username = request.session.get('username', '')
+    centros_permitidos_ids = get_centros_permitidos(username)
+    tem_lista_permitida = bool(centros_permitidos_ids)
+
+    ano_atual = datetime.now().year
+    ano = int(request.GET.get('ano') or request.POST.get('ano') or ano_atual)
+    empresa = request.GET.get('empresa') or request.POST.get('empresa') or ''
+    centro = request.GET.get('centro') or request.POST.get('centro') or ''
+
+    # Listas auxiliares
+    def post_api(endpoint):
+        url = f"{get_dynamic_config('API_BASE_URL')}/cisspoder-service/{endpoint}"
+        try:
+            resp = requests.post(url, json={"page": 1}, headers=headers, timeout=60)
+            if resp.status_code == 200:
+                return resp.json().get("data", [])
+        except Exception:
+            logger.exception(f"❌ Erro ao buscar {endpoint}")
+        return []
+
+    empresas = _get_lista_cached('empresas', 'cadastro_empresa', headers)
+    centros = _get_lista_cached('centros', 'cadastro_centroresultados', headers)
+
+    # Filtrar centros conforme permissões
+    if tem_lista_permitida:
+        centros = [c for c in centros if c.get('idcentroresultado') and int(c.get('idcentroresultado')) in centros_permitidos_ids]
+    sem_centros_permitidos = tem_lista_permitida and not centros
+
+    # Se só tem 1 centro permitido, pré-seleciona
+    centro_preselect_id = None
+    if tem_lista_permitida and len(centros) == 1:
+        try:
+            centro_preselect_id = int(centros[0].get('idcentroresultado'))
+        except Exception:
+            pass
+        if not centro:
+            centro = str(centro_preselect_id) if centro_preselect_id else ''
+
+    # Carrega dados sempre (não-eager apenas pro POST atual; v2 é eager)
+    contas = []
+    erro_api = None
+    consultou = False
+
+    if not sem_centros_permitidos and centro:
+        consultou = True
+        payload = {
+            "page": 1, "limit": 1000,
+            "clausulas": [
+                {"campo": "anoreferencia", "operadorlogico": "AND", "operador": "IGUAL", "valor": ano},
+                {"campo": "idempfiltro", "operadorlogico": "AND", "operador": "IGUAL",
+                 "valor": int(empresa) if empresa else None},
+                {"campo": "idcentroresultadofiltro", "operadorlogico": "AND", "operador": "IGUAL",
+                 "valor": int(centro) if centro else None},
+            ],
+        }
+        url = f"{get_dynamic_config('API_BASE_URL')}/cisspoder-service/centro_resultado_bi"
+        dados = []
+        try:
+            page = 1
+            while True:
+                payload["page"] = page
+                resp = requests.post(url, json=payload, headers=headers, timeout=120)
+                if resp.status_code != 200:
+                    erro_api = f"HTTP {resp.status_code}"
+                    break
+                r = resp.json()
+                dados.extend(r.get("data", []))
+                if not r.get("hasNext", False):
+                    break
+                page += 1
+        except Exception as e:
+            erro_api = str(e)
+            logger.exception("❌ Painel v2 - erro centro_resultado_bi")
+
+        # Reaproveita agrupar_resultados (modo "por conta")
+        agrupado = agrupar_resultados(dados, agrupar_por_centro=False, agrupar_por_empresa=False)
+        agrup = agrupado.get('agrupado', {})
+
+        # Formato pro JS: lista de {code, name, values[12][prev, real]}
+        # 'conta' vem como "<codigo> - <nome>" (concat na function DB2 retornou em CONTABIL)
+        for conta_str, meses_data in agrup.items():
+            partes = str(conta_str).split(' - ', 1)
+            code = partes[0].strip() if partes else str(conta_str)
+            name = partes[1].strip() if len(partes) > 1 else ''
+            values = []
+            for mes in range(1, 13):
+                m_key = f"{mes:02d}"
+                d = meses_data.get(m_key, {})
+                values.append([
+                    float(d.get('previsto') or 0),
+                    float(d.get('realizado') or 0),
+                ])
+            contas.append({"code": code, "name": name, "values": values})
+
+        contas.sort(key=lambda x: x.get("code", ""))
+
+    context = {
+        'empresas': empresas,
+        'centros': centros,
+        'ano': ano,
+        'ano_atual': ano_atual,
+        'empresa': empresa,
+        'centro': centro,
+        'contas_json': json.dumps(contas, ensure_ascii=False),
+        'consultou': consultou,
+        'erro_api': erro_api,
+        'sem_centros_permitidos': sem_centros_permitidos,
+        'tem_lista_permitida': tem_lista_permitida,
+        'centro_preselect_id': centro_preselect_id,
+        'pode_gerenciar_usuarios': usuario_pode_gerenciar_usuarios(username),
+        'tem_acesso_configuracao': usuario_tem_acesso_configuracao(username),
+        'pode_aprovar_liberacao': usuario_pode_aprovar_liberacao(username),
+    }
+    return render(request, 'painel_v2.html', context)

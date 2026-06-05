@@ -23,6 +23,7 @@ urlpatterns = [
     path('exportar_excel/', views.exportar_excel_view, name='exportar_excel'),
     path('buscar_configuracoes_ajax/', views.buscar_configuracoes_ajax, name='buscar_configuracoes_ajax'),
     path('dre/', views.dre_view, name='dre'),
+    path('painel-v2/', views.painel_v2_view, name='painel_v2'),
     path('liberacoes/aprovar/', views.liberacoes_aprovar_view, name='liberacoes_aprovar'),
     path('liberacoes/minhas/', views.liberacoes_minhas_view, name='liberacoes_minhas'),
     path('liberacoes/decidir/', views.liberacao_decidir_ajax, name='liberacao_decidir'),

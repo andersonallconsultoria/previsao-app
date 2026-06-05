@@ -1,0 +1,901 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <title>Painel - Sistema de Previsão</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    th, td { white-space: nowrap; }
+    
+    /* Container para scroll vertical */
+    .table-container {
+      max-height: 600px;
+      overflow-y: auto;
+      overflow-x: auto;
+    }
+    
+    /* Cabeçalho fixo - PRIMEIRA LINHA */
+    .sticky-header > tr:first-child th {
+      position: sticky;
+      top: 0;
+      background: #343a40 !important;
+      color: white !important;
+      z-index: 102;
+      box-shadow: 0 2px 2px -1px rgba(0, 0, 0, 0.4);
+    }
+    
+    /* Segunda linha do cabeçalho também fixa */
+    .sticky-header > tr:nth-child(2) th {
+      position: sticky;
+      top: 38px; /* Altura da primeira linha (reduzida) */
+      background: #495057 !important;
+      color: white !important;
+      z-index: 101;
+      box-shadow: 0 2px 2px -1px rgba(0, 0, 0, 0.4);
+    }
+    
+    /* Garante que a célula com rowspan ocupe as duas linhas sem linha branca */
+    .sticky-header th[rowspan="2"] {
+      vertical-align: top;
+    }
+    
+    /* Reduz padding geral do cabeçalho */
+    .sticky-header th {
+      padding: 4px 12px !important;
+    }
+    
+    .sticky-header > tr:first-child th {
+      padding: 6px 12px !important;
+    }
+    
+    .sticky-header > tr:nth-child(2) th {
+      padding: 2px 12px !important;
+      font-size: 11px;
+      height: 34px;
+      vertical-align: middle;
+    }
+    
+    /* Remover estilos customizados - usar padrão igual aos outros cabeçalhos */
+    .sub-header {
+      font-size: 12px;
+      font-weight: normal;
+    }
+    
+    /* Garante que o fundo laranja seja visível */
+    .bg-warning.bg-opacity-25 {
+      background-color: rgba(255, 193, 7, 0.3) !important;
+    }
+    
+    /* Adiciona cor laranja mais forte para teste */
+    .bg-laranja-previsto {
+      background-color: rgba(255, 165, 0, 0.4) !important;
+    }
+    .scroll-x {
+      overflow-x: auto;
+      width: 100%;
+    }
+    
+    .table {
+      width: 100% !important;
+      min-width: 100%;
+    }
+    
+    .container {
+      max-width: 100% !important;
+      padding-left: 15px;
+      padding-right: 15px;
+    }
+    
+    /* Paleta COE - Estilo dos filtros */
+    .filtros-section {
+      background: linear-gradient(135deg, #004AAD, #1ABC9C);
+      padding: 15px;
+      border-radius: 10px;
+      margin-bottom: 20px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    
+    .filtros-section .form-label {
+      color: white !important;
+      font-weight: 500;
+    }
+    
+    .filtros-section .form-select,
+    .filtros-section .form-control {
+      background-color: rgba(255, 255, 255, 0.95);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+    }
+    
+    .filtros-section .form-select:focus,
+    .filtros-section .form-control:focus {
+      background-color: white;
+      border-color: rgba(255, 255, 255, 0.5);
+      box-shadow: 0 0 0 0.2rem rgba(255, 255, 255, 0.5);
+    }
+    
+    .filtros-section .btn-primary {
+      background-color: #FF6B00 !important;
+      color: #FFFFFF !important;
+      border: none !important;
+      font-weight: 500 !important;
+    }
+    
+    .filtros-section .btn-primary:hover {
+      background-color: #e85500 !important;
+      transform: translateY(-1px);
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+      color: #FFFFFF !important;
+    }
+    
+    .filtros-section .btn-success {
+      background-color: #546E7A !important;
+      color: #FFFFFF !important;
+      border: none !important;
+      font-weight: 500 !important;
+    }
+    
+    .filtros-section .btn-success:hover {
+      background-color: #455a64 !important;
+      transform: translateY(-1px);
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+      color: #FFFFFF !important;
+    }
+    
+    .filtros-section .btn-secondary {
+      background: rgba(255, 255, 255, 0.2);
+      color: white;
+      border: 1px solid rgba(255, 255, 255, 0.3);
+    }
+    
+    .filtros-section .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.3);
+      color: white;
+    }
+    
+    pre.debug-block {
+      background: #f8f9fa;
+      padding: 10px;
+      border: 1px dashed #ccc;
+      font-size: 12px;
+      max-height: 300px;
+      overflow: auto;
+    }
+    /* Cores alternadas para colunas de meses */
+    .mes-bg-1 { background-color: #f0f4f8 !important; }
+    .mes-bg-2 { background-color: #e2eafc !important; }
+    /* Espaço maior para colunas de valores */
+    .valor-col { min-width: 90px; }
+    
+    /* Estilos para totalizadores */
+    .totalizador-header {
+      background: linear-gradient(45deg, #343a40, #495057) !important;
+      color: white !important;
+      font-weight: bold;
+    }
+    
+    .totalizador-row {
+      background: linear-gradient(45deg, #fff3cd, #ffeaa7) !important;
+      font-weight: bold;
+    }
+    
+    .totalizador-row:hover {
+      background: linear-gradient(45deg, #ffeaa7, #fdcb6e) !important;
+    }
+    
+    /* Estilos para cabeçalhos de centro de resultados */
+    .centro-header {
+      background: linear-gradient(45deg, #2c3e50, #34495e) !important;
+      color: white !important;
+      font-weight: bold;
+      font-size: 1.1em;
+    }
+    
+    .centro-header td {
+      padding: 12px !important;
+    }
+    
+    /* Estilos para totalizadores de centro */
+    .totalizador-centro {
+      background: linear-gradient(45deg, #e74c3c, #c0392b) !important;
+      color: white !important;
+      font-weight: bold;
+    }
+    
+    .totalizador-centro:hover {
+      background: linear-gradient(45deg, #c0392b, #a93226) !important;
+    }
+    
+    /* Indentação para contas dentro de centros */
+    .ps-4 {
+      padding-left: 2rem !important;
+    }
+    
+    /* Estilos para autocomplete */
+    .autocomplete-wrapper {
+      position: relative;
+    }
+    
+    .autocomplete-container {
+      position: relative;
+    }
+    
+    .autocomplete-results {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      background: white;
+      border: 1px solid #ddd;
+      border-top: none;
+      max-height: 200px;
+      overflow-y: auto;
+      z-index: 1000;
+      display: none;
+    }
+    
+    .autocomplete-item {
+      padding: 8px 12px;
+      cursor: pointer;
+      border-bottom: 1px solid #eee;
+    }
+    
+    .autocomplete-item:hover {
+      background-color: #f8f9fa;
+    }
+    
+    .autocomplete-item.selected {
+      background-color: #007bff;
+      color: white;
+    }
+    
+    /* Estilos para cores de valores realizados - DADOS NORMAIS (fundo branco/cinza) */
+    .bg-danger.bg-opacity-25 {
+      background-color: rgba(220, 53, 69, 0.25) !important;
+    }
+    
+    .bg-success.bg-opacity-25 {
+      background-color: rgba(25, 135, 84, 0.25) !important;
+    }
+    
+    /* Cores mais escuras APENAS para totais anuais (fundo azul) */
+    .bg-primary.bg-danger.bg-opacity-25 {
+      background-color: rgba(220, 53, 69, 0.85) !important;
+    }
+    
+    .bg-primary.bg-success.bg-opacity-25 {
+      background-color: rgba(25, 135, 84, 0.85) !important;
+    }
+    
+    /* Hover para células coloridas */
+    .bg-danger.bg-opacity-25:hover {
+      background-color: rgba(220, 53, 69, 0.35) !important;
+    }
+    
+    .bg-success.bg-opacity-25:hover {
+      background-color: rgba(25, 135, 84, 0.35) !important;
+    }
+    
+    /* Hover para totais anuais */
+    .bg-primary.bg-danger.bg-opacity-25:hover {
+      background-color: rgba(220, 53, 69, 0.95) !important;
+    }
+    
+    .bg-primary.bg-success.bg-opacity-25:hover {
+      background-color: rgba(25, 135, 84, 0.95) !important;
+    }
+    
+    /* Estilos para filtros compactos */
+    .form-control-sm, .form-select-sm {
+      font-size: 0.875rem;
+      padding: 0.25rem 0.5rem;
+    }
+    
+    .btn-sm {
+      font-size: 0.875rem;
+      padding: 0.25rem 0.5rem;
+    }
+    
+    .small {
+      font-size: 0.875rem;
+    }
+    
+    /* Campo de ano mais compacto */
+    input[name="ano"] {
+      max-width: 80px;
+      text-align: center;
+    }
+    
+    /* Fundo gradiente COE para toda a página */
+    body {
+      background: linear-gradient(135deg, #004AAD, #1ABC9C);
+      min-height: 100vh;
+    }
+    
+    /* Container principal com fundo transparente */
+    .container.py-5 {
+      background: transparent;
+    }
+    
+    /* Garante que a tabela tenha fundo branco */
+    .table-container,
+    .scroll-x {
+      background: white;
+      border-radius: 8px;
+      padding: 15px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+    
+    /* Info box também com fundo branco */
+    .alert-info {
+      background: rgba(255, 255, 255, 0.95) !important;
+      border: 1px solid rgba(255, 255, 255, 0.3) !important;
+    }
+    
+    /* Título em branco para contrastar com o fundo gradiente */
+    h2 {
+      color: white !important;
+      text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+      font-weight: 600;
+    }
+    
+    h4 {
+      color: white !important;
+      text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+      font-weight: 500;
+    }
+    
+    /* Subtítulo "Mostrando" também em branco */
+    small {
+      color: rgba(255, 255, 255, 0.95) !important;
+    }
+  </style>
+</head>
+<body>
+{% load custom_filters %}
+
+<div class="container py-5">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h2>Controle de Orçamento Empresarial</h2>
+    <div>
+      <a href="{% url 'logout' %}" class="btn btn-danger btn-sm" style="background-color: #dc3545 !important; color: white !important; border: none; font-weight: 500;">🚪 Sair</a>
+    </div>
+  </div>
+
+  {% if sem_centros_permitidos %}
+    <div class="alert alert-danger">
+      {{ mensagem_bloqueio|default:"Usuário não tem centro de resultados relacionado. Contate o administrador." }}
+    </div>
+  {% endif %}
+
+  <form method="post" class="filtros-section">
+    {% csrf_token %}
+    <div class="row g-2 align-items-end">
+      <div class="col-md-2">
+        <label class="form-label small mb-1">Empresa</label>
+        <select name="empresa" class="form-select form-select-sm" {% if sem_centros_permitidos %}disabled{% endif %}>
+          <option value="">Todas</option>
+          {% for emp in empresas %}
+            <option value="{{ emp.idempresa }}" {% if request.POST.empresa == emp.idempresa|stringformat:"s" %}selected{% endif %}>{{ emp.empresa }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label small mb-1">Centro de Resultado</label>
+        <div class="autocomplete-wrapper">
+          <input type="text" id="centro-search" class="form-control form-control-sm" placeholder="Digite para pesquisar centros..." autocomplete="off" {% if sem_centros_permitidos %}disabled{% endif %}>
+          <select name="centro" class="form-select form-select-sm" id="centro-select" style="display: none;" {% if sem_centros_permitidos %}disabled{% endif %}>
+          {% if tem_lista_permitida and centros|length > 1 %}
+            <option value="" selected>Selecione um centro</option>
+          {% elif not tem_lista_permitida %}
+            <option value="">Todos</option>
+          {% endif %}
+          {% for cr in centros %}
+            <option value="{{ cr.idcentroresultado }}"
+              {% if request.POST.centro == cr.idcentroresultado|stringformat:"s" %}
+                selected
+              {% elif request.method != "POST" and centro_preselect_id and centro_preselect_id == cr.idcentroresultado %}
+                selected
+              {% endif %}
+            >{{ cr.centroresultados }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      </div>
+      <div class="col-md-1">
+        <label class="form-label small mb-1">Ano</label>
+        <input type="number" name="ano" class="form-control form-control-sm" value="{{ request.POST.ano|default:ano_atual }}" required {% if sem_centros_permitidos %}disabled{% endif %}>
+      </div>
+      <div class="col-md-2">
+        <button type="submit" class="btn btn-primary btn-sm" {% if sem_centros_permitidos %}disabled{% endif %}>🔍 Pesquisar</button>
+        {% if tem_acesso_configuracao %}
+        <a href="{% url 'configuracao' %}" class="btn btn-success btn-sm ms-1">🔧 Configuração</a>
+        {% endif %}
+        <a href="{% url 'dre' %}" class="btn btn-sm ms-1" style="background-color: #0f63ff !important; color: white !important;">📊 DRE</a>
+        <a href="{% url 'liberacoes_minhas' %}" class="btn btn-sm ms-1" style="background-color: #6b7280 !important; color: white !important;">📋 Minhas Solicitações</a>
+        {% if pode_aprovar_liberacao %}
+        <a href="{% url 'liberacoes_aprovar' %}" class="btn btn-sm ms-1 position-relative" style="background-color: #16a34a !important; color: white !important;">
+          ✅ Aprovar Liberações
+          <span id="badge-pendentes" class="position-absolute top-0 start-100 translate-middle badge rounded-pill" style="background-color: #ff7a00 !important; display:none;">0</span>
+        </a>
+        {% endif %}
+        <button type="button" id="btn-exportar-excel" class="btn btn-info btn-sm ms-1" style="background-color: #17a2b8 !important; color: white !important; display: none;" {% if sem_centros_permitidos %}disabled{% endif %}>📊 Exportar para Excel</button>
+        {% if pode_gerenciar_usuarios %}
+        <a href="{% url 'configuracao_usuarios' %}" class="btn btn-info btn-sm ms-1">👥 Config. Usuários</a>
+        {% endif %}
+      </div>
+    </div>
+  </form>
+
+  {% if request.method == "POST" %}
+    <div class="mb-2">
+      <small style="color: white !important; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);">
+        📌 <strong>Filtros:</strong> Ano: {{ request.POST.ano }} | 
+        Empresa: {{ request.POST.empresa|default:"(Todas)" }} | 
+        Centro: {{ request.POST.centro|default:"(Todos)" }}
+      </small>
+    </div>
+    <script>
+      // Mostrar botão de exportar após pesquisa
+      document.addEventListener('DOMContentLoaded', function() {
+        const btnExportar = document.getElementById('btn-exportar-excel');
+        if (btnExportar) {
+          btnExportar.style.display = 'inline-block';
+        }
+      });
+    </script>
+  {% endif %}
+
+  {% if agrupar_por_centro and agrupado_por_centro %}
+    <h4 class="mb-3">📊 Controle de Orçamento por Centro de Resultados</h4>
+    <div class="scroll-x table-container">
+      <table class="table table-bordered table-sm table-striped">
+        <thead class="table-dark sticky-header">
+          <tr>
+            <th rowspan="2">Centro de Resultados / Conta Contábil</th>
+            {% for mes_num, mes_nome in meses %}
+              <th colspan="3" class="text-center">{{ mes_nome }} / {{ request.POST.ano|default_if_none:"2025" }}</th>
+            {% endfor %}
+            <th colspan="3" class="text-center bg-primary text-white">TOTAIS ANUAIS</th>
+          </tr>
+          <tr>
+            {% for _ in meses %}
+              <th class="sub-header text-center">Ano Ant.</th>
+              <th class="sub-header text-center">Previsto</th>
+              <th class="sub-header text-center">Realizado</th>
+            {% endfor %}
+            <th class="sub-header text-center bg-primary text-white">Ano Ant.</th>
+            <th class="sub-header text-center bg-primary text-white">Previsto</th>
+            <th class="sub-header text-center bg-primary text-white">Realizado</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for centro, contas in agrupado_por_centro.items %}
+            <!-- Cabeçalho do Centro de Resultados -->
+            <tr class="centro-header">
+              <td colspan="{{ meses|calcular_colspan|add:3 }}" class="text-center">
+                <strong>🏢 {{ centro }}</strong>
+              </td>
+            </tr>
+            
+            <!-- Contas do Centro -->
+            {% for conta, dados_mes in contas.items %}
+              <tr>
+                <td class="ps-4"><strong>{{ conta }}</strong></td>
+                {% for mes_num, _ in meses %}
+                  {% with mes_dados=dados_mes|get_item:mes_num %}
+                    {% if mes_dados %}
+                      <td class="text-end valor-col {% if forloop.counter0|divisibleby:2 %}mes-bg-1{% else %}mes-bg-2{% endif %}">R$ {{ mes_dados.ano_anterior|floatformat:2 }}</td>
+                      <td class="text-end valor-col {% if forloop.counter0|divisibleby:2 %}mes-bg-1{% else %}mes-bg-2{% endif %} {{ mes_dados.previsto|get_previsto_color:mes_dados.ano_anterior }}">R$ {{ mes_dados.previsto|floatformat:2 }}</td>
+                      <td class="text-end valor-col {% if forloop.counter0|divisibleby:2 %}mes-bg-1{% else %}mes-bg-2{% endif %} {{ mes_dados.realizado|get_valor_color:mes_dados.previsto }}">R$ {{ mes_dados.realizado|floatformat:2 }}</td>
+                    {% else %}
+                      <td class="text-end valor-col {% if forloop.counter0|divisibleby:2 %}mes-bg-1{% else %}mes-bg-2{% endif %}">R$ 0,00</td>
+                      <td class="text-end valor-col {% if forloop.counter0|divisibleby:2 %}mes-bg-1{% else %}mes-bg-2{% endif %}">R$ 0,00</td>
+                      <td class="text-end valor-col {% if forloop.counter0|divisibleby:2 %}mes-bg-1{% else %}mes-bg-2{% endif %}">R$ 0,00</td>
+                    {% endif %}
+                  {% endwith %}
+                {% endfor %}
+                <!-- Totais anuais da conta -->
+                {% with realizado_total=totais_anuais_conta|get_item:conta|get_item:"realizado_total"|default:0 previsto_total=totais_anuais_conta|get_item:conta|get_item:"previsto_total"|default:0 ano_anterior_total=totais_anuais_conta|get_item:conta|get_item:"ano_anterior_total"|default:0 %}
+                <td class="text-end valor-col bg-primary text-white">R$ {{ ano_anterior_total|floatformat:2 }}</td>
+                <td class="text-end valor-col bg-primary text-white {{ previsto_total|get_previsto_color:ano_anterior_total }}">R$ {{ previsto_total|floatformat:2 }}</td>
+                <td class="text-end valor-col bg-primary text-white {{ realizado_total|get_valor_color:previsto_total }}">R$ {{ realizado_total|floatformat:2 }}</td>
+                {% endwith %}
+              </tr>
+            {% endfor %}
+            
+            <!-- Totalizador do Centro -->
+            <tr class="totalizador-centro">
+              <td><strong>💰 TOTAL {{ centro }}</strong></td>
+              {% for mes_num, _ in meses %}
+                {% with chave_ano=mes_num|add:"_ano_anterior" chave_prev=mes_num|add:"_previsto" chave_real=mes_num|add:"_realizado" %}
+                  <td class="text-end valor-col">R$ {{ totalizadores_centro|get_item:centro|get_item:chave_ano|default:0|floatformat:2 }}</td>
+                  <td class="text-end valor-col">R$ {{ totalizadores_centro|get_item:centro|get_item:chave_prev|default:0|floatformat:2 }}</td>
+                  <td class="text-end valor-col">R$ {{ totalizadores_centro|get_item:centro|get_item:chave_real|default:0|floatformat:2 }}</td>
+                {% endwith %}
+              {% endfor %}
+              <!-- Totais anuais do centro -->
+              {% with realizado_total=totalizadores_centro|get_item:centro|get_item:"realizado_total"|default:0 previsto_total=totalizadores_centro|get_item:centro|get_item:"previsto_total"|default:0 ano_anterior_total=totalizadores_centro|get_item:centro|get_item:"ano_anterior_total"|default:0 %}
+              <td class="text-end valor-col bg-primary text-white">R$ {{ ano_anterior_total|floatformat:2 }}</td>
+              <td class="text-end valor-col bg-primary text-white {{ previsto_total|get_previsto_color:ano_anterior_total }}">R$ {{ previsto_total|floatformat:2 }}</td>
+              <td class="text-end valor-col bg-primary text-white {{ realizado_total|get_valor_color:previsto_total }}">R$ {{ realizado_total|floatformat:2 }}</td>
+              {% endwith %}
+            </tr>
+            
+            <!-- Espaçador entre centros -->
+            <tr class="espacador">
+              <td colspan="{{ meses|calcular_colspan|add:3 }}" style="height: 10px; background-color: #f8f9fa;"></td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% elif agrupado_por_empresa %}
+    <h4 class="mb-3">📊 Controle de Orçamento por Empresa</h4>
+    <div class="scroll-x table-container">
+      <table class="table table-bordered table-sm table-striped agrupado-por-empresa">
+        <thead class="table-dark sticky-header">
+          <tr>
+            <th rowspan="2">Empresa / Conta Contábil</th>
+            {% for mes_num, mes_nome in meses %}
+              <th colspan="3" class="text-center">{{ mes_nome }} / {{ request.POST.ano|default_if_none:"2025" }}</th>
+            {% endfor %}
+            <th colspan="3" class="text-center bg-primary text-white">TOTAIS ANUAIS</th>
+          </tr>
+          <tr>
+            {% for _ in meses %}
+              <th class="sub-header text-center">Ano Ant.</th>
+              <th class="sub-header text-center">Previsto</th>
+              <th class="sub-header text-center">Realizado</th>
+            {% endfor %}
+            <th class="sub-header text-center bg-primary text-white">Ano Ant.</th>
+            <th class="sub-header text-center bg-primary text-white">Previsto</th>
+            <th class="sub-header text-center bg-primary text-white">Realizado</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for empresa, contas in agrupado_por_empresa.items %}
+            <!-- Cabeçalho da Empresa - linha separada como na imagem -->
+            <tr class="centro-header" style="background: #6c757d !important; color: white !important;">
+              <td class="text-left" style="padding: 8px 15px !important; font-size: 1em !important; font-weight: bold !important;">
+                <strong>🏢 {{ empresa|default:"Empresa não identificada" }}</strong>
+              </td>
+              <td colspan="{{ meses|calcular_colspan|add:2 }}" style="background: #6c757d !important;"></td>
+            </tr>
+            
+            <!-- Contas da Empresa -->
+            {% for conta, dados_mes in contas.items %}
+              <tr>
+                <td class="ps-4"><strong>{{ conta }}</strong></td>
+                {% for mes_num, _ in meses %}
+                  {% with mes_dados=dados_mes|get_item:mes_num %}
+                    {% if mes_dados %}
+                      <td class="text-end valor-col {% if forloop.counter0|divisibleby:2 %}mes-bg-1{% else %}mes-bg-2{% endif %}">R$ {{ mes_dados.ano_anterior|floatformat:2 }}</td>
+                      <td class="text-end valor-col {% if forloop.counter0|divisibleby:2 %}mes-bg-1{% else %}mes-bg-2{% endif %} {{ mes_dados.previsto|get_previsto_color:mes_dados.ano_anterior }}">R$ {{ mes_dados.previsto|floatformat:2 }}</td>
+                      <td class="text-end valor-col {% if forloop.counter0|divisibleby:2 %}mes-bg-1{% else %}mes-bg-2{% endif %} {{ mes_dados.realizado|get_valor_color:mes_dados.previsto }}">R$ {{ mes_dados.realizado|floatformat:2 }}</td>
+                    {% else %}
+                      <td class="text-end valor-col {% if forloop.counter0|divisibleby:2 %}mes-bg-1{% else %}mes-bg-2{% endif %}">R$ 0,00</td>
+                      <td class="text-end valor-col {% if forloop.counter0|divisibleby:2 %}mes-bg-1{% else %}mes-bg-2{% endif %}">R$ 0,00</td>
+                      <td class="text-end valor-col {% if forloop.counter0|divisibleby:2 %}mes-bg-1{% else %}mes-bg-2{% endif %}">R$ 0,00</td>
+                    {% endif %}
+                  {% endwith %}
+                {% endfor %}
+                <!-- Totais anuais da conta - usar estrutura simplificada do backend -->
+                {% comment %} Buscar totais usando a chave empresa||conta {% endcomment %}
+                {% with chave_completa=empresa|concat:"||"|concat:conta %}
+                  {% with totais_conta=totais_anuais_conta|get_item:chave_completa %}
+                    {% if totais_conta %}
+                      <td class="text-end valor-col bg-primary text-white">R$ {{ totais_conta.ano_anterior_total|default:0|floatformat:2 }}</td>
+                      <td class="text-end valor-col bg-primary text-white {{ totais_conta.previsto_total|default:0|get_previsto_color:totais_conta.ano_anterior_total|default:0 }}">R$ {{ totais_conta.previsto_total|default:0|floatformat:2 }}</td>
+                      <td class="text-end valor-col bg-primary text-white {{ totais_conta.realizado_total|default:0|get_valor_color:totais_conta.previsto_total|default:0 }}">R$ {{ totais_conta.realizado_total|default:0|floatformat:2 }}</td>
+                    {% else %}
+                      <td class="text-end valor-col bg-primary text-white">R$ 0,00</td>
+                      <td class="text-end valor-col bg-primary text-white">R$ 0,00</td>
+                      <td class="text-end valor-col bg-primary text-white">R$ 0,00</td>
+                    {% endif %}
+                  {% endwith %}
+                {% endwith %}
+              </tr>
+            {% endfor %}
+            
+            <!-- Totalizador da Empresa -->
+            <tr class="totalizador-centro" style="background: linear-gradient(45deg, #e74c3c, #c0392b) !important; color: white !important;">
+              <td><strong>💰 TOTAL {{ empresa|default:"Empresa" }}</strong></td>
+              {% for mes_num, _ in meses %}
+                {% with chave_ano=mes_num|concat:"_ano_anterior" chave_prev=mes_num|concat:"_previsto" chave_real=mes_num|concat:"_realizado" %}
+                  <td class="text-end valor-col">R$ {{ totalizadores_empresa|get_item:empresa|get_item:chave_ano|default:0|floatformat:2 }}</td>
+                  <td class="text-end valor-col">R$ {{ totalizadores_empresa|get_item:empresa|get_item:chave_prev|default:0|floatformat:2 }}</td>
+                  <td class="text-end valor-col">R$ {{ totalizadores_empresa|get_item:empresa|get_item:chave_real|default:0|floatformat:2 }}</td>
+                {% endwith %}
+              {% endfor %}
+              <!-- Totais anuais da empresa -->
+              {% with realizado_total=totalizadores_empresa|get_item:empresa|get_item:"realizado_total"|default:0 previsto_total=totalizadores_empresa|get_item:empresa|get_item:"previsto_total"|default:0 ano_anterior_total=totalizadores_empresa|get_item:empresa|get_item:"ano_anterior_total"|default:0 %}
+              <td class="text-end valor-col bg-primary text-white">R$ {{ ano_anterior_total|floatformat:2 }}</td>
+              <td class="text-end valor-col bg-primary text-white {{ previsto_total|get_previsto_color:ano_anterior_total }}">R$ {{ previsto_total|floatformat:2 }}</td>
+              <td class="text-end valor-col bg-primary text-white {{ realizado_total|get_valor_color:previsto_total }}">R$ {{ realizado_total|floatformat:2 }}</td>
+              {% endwith %}
+            </tr>
+            
+            <!-- Espaçador entre empresas -->
+            <tr class="espacador">
+              <td colspan="{{ meses|calcular_colspan|add:3 }}" style="height: 10px; background-color: #f8f9fa;"></td>
+            </tr>
+          {% endfor %}
+          
+          <!-- Totalizador Geral (soma de todas as empresas) -->
+          <tr class="totalizador-geral" style="background: linear-gradient(45deg, #8e44ad, #6c3483) !important; color: white !important; font-size: 1.1em !important; font-weight: bold !important;">
+            <td><strong>🌟 TOTAL GERAL (TODAS AS EMPRESAS)</strong></td>
+            {% for mes_num, _ in meses %}
+              {% with chave_ano=mes_num|concat:"_ano_anterior" chave_prev=mes_num|concat:"_previsto" chave_real=mes_num|concat:"_realizado" %}
+                <td class="text-end valor-col">R$ {{ totalizadores_geral|get_item:chave_ano|default:0|floatformat:2 }}</td>
+                <td class="text-end valor-col">R$ {{ totalizadores_geral|get_item:chave_prev|default:0|floatformat:2 }}</td>
+                <td class="text-end valor-col">R$ {{ totalizadores_geral|get_item:chave_real|default:0|floatformat:2 }}</td>
+              {% endwith %}
+            {% endfor %}
+            <!-- Totais anuais gerais -->
+            {% with realizado_total=totalizadores_geral|get_item:"realizado_total"|default:0 previsto_total=totalizadores_geral|get_item:"previsto_total"|default:0 ano_anterior_total=totalizadores_geral|get_item:"ano_anterior_total"|default:0 %}
+            <td class="text-end valor-col bg-primary text-white">R$ {{ ano_anterior_total|floatformat:2 }}</td>
+            <td class="text-end valor-col bg-primary text-white {{ previsto_total|get_previsto_color:ano_anterior_total }}">R$ {{ previsto_total|floatformat:2 }}</td>
+            <td class="text-end valor-col bg-primary text-white {{ realizado_total|get_valor_color:previsto_total }}">R$ {{ realizado_total|floatformat:2 }}</td>
+            {% endwith %}
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  {% elif agrupado %}
+    <h4 class="mb-3">📊 Tabela Agrupada por Conta Contábil</h4>
+    <div class="scroll-x table-container">
+      <table class="table table-bordered table-sm table-striped">
+        <thead class="table-dark sticky-header">
+          <tr>
+            <th rowspan="2">Conta Contábil</th>
+            {% for mes_num, mes_nome in meses %}
+              <th colspan="3" class="text-center">{{ mes_nome }} / {{ request.POST.ano|default_if_none:"2025" }}</th>
+            {% endfor %}
+            <th colspan="3" class="text-center bg-primary text-white">TOTAIS ANUAIS</th>
+          </tr>
+          <tr>
+            {% for _ in meses %}
+              <th class="sub-header text-center">Ano Ant.</th>
+              <th class="sub-header text-center">Previsto</th>
+              <th class="sub-header text-center">Realizado</th>
+            {% endfor %}
+            <th class="sub-header text-center bg-primary text-white">Ano Ant.</th>
+            <th class="sub-header text-center bg-primary text-white">Previsto</th>
+            <th class="sub-header text-center bg-primary text-white">Realizado</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for conta, dados_mes in agrupado.items %}
+            <tr>
+              <td><strong>{{ conta }}</strong></td>
+              {% for mes_num, _ in meses %}
+                {% with mes_dados=dados_mes|get_item:mes_num %}
+                  {% if mes_dados %}
+                    <td class="text-end valor-col {% if forloop.counter0|divisibleby:2 %}mes-bg-1{% else %}mes-bg-2{% endif %}">R$ {{ mes_dados.ano_anterior|floatformat:2 }}</td>
+                    <td class="text-end valor-col {% if forloop.counter0|divisibleby:2 %}mes-bg-1{% else %}mes-bg-2{% endif %} {{ mes_dados.previsto|get_previsto_color:mes_dados.ano_anterior }}">R$ {{ mes_dados.previsto|floatformat:2 }}</td>
+                    <td class="text-end valor-col {% if forloop.counter0|divisibleby:2 %}mes-bg-1{% else %}mes-bg-2{% endif %} {{ mes_dados.realizado|get_valor_color:mes_dados.previsto }}">R$ {{ mes_dados.realizado|floatformat:2 }}</td>
+                  {% else %}
+                    <td class="text-end valor-col {% if forloop.counter0|divisibleby:2 %}mes-bg-1{% else %}mes-bg-2{% endif %}">R$ 0,00</td>
+                    <td class="text-end valor-col {% if forloop.counter0|divisibleby:2 %}mes-bg-1{% else %}mes-bg-2{% endif %}">R$ 0,00</td>
+                    <td class="text-end valor-col {% if forloop.counter0|divisibleby:2 %}mes-bg-1{% else %}mes-bg-2{% endif %}">R$ 0,00</td>
+                  {% endif %}
+                {% endwith %}
+              {% endfor %}
+              <!-- Totais anuais da conta -->
+              {% with realizado_total=totais_anuais_conta|get_item:conta|get_item:"realizado_total"|default:0 previsto_total=totais_anuais_conta|get_item:conta|get_item:"previsto_total"|default:0 ano_anterior_total=totais_anuais_conta|get_item:conta|get_item:"ano_anterior_total"|default:0 %}
+              <td class="text-end valor-col bg-primary text-white">R$ {{ ano_anterior_total|floatformat:2 }}</td>
+              <td class="text-end valor-col bg-primary text-white {{ previsto_total|get_previsto_color:ano_anterior_total }}">R$ {{ previsto_total|floatformat:2 }}</td>
+              <td class="text-end valor-col bg-primary text-white {{ realizado_total|get_valor_color:previsto_total }}">R$ {{ realizado_total|floatformat:2 }}</td>
+              {% endwith %}
+            </tr>
+          {% endfor %}
+          
+          <!-- Totalizadores por Centro de Resultados -->
+          {% if totalizadores_centro %}
+            <tr class="totalizador-header">
+              <td colspan="1"><strong>💰 TOTALIZADORES POR CENTRO DE RESULTADOS</strong></td>
+              {% for mes_num, _ in meses %}
+                <td colspan="3" class="text-center"><strong>{{ mes_num }}</strong></td>
+              {% endfor %}
+              <td colspan="3" class="text-center bg-primary text-white"><strong>TOTAIS ANUAIS</strong></td>
+            </tr>
+            {% for centro, totais in totalizadores_centro.items %}
+              <tr class="totalizador-row">
+                <td><strong>📊 {{ centro }}</strong></td>
+                {% for mes_num, _ in meses %}
+                  {% with chave_ano=mes_num|add:"_ano_anterior" chave_prev=mes_num|add:"_previsto" chave_real=mes_num|add:"_realizado" %}
+                    <td class="text-end valor-col">R$ {{ totais|get_item:chave_ano|default:0|floatformat:2 }}</td>
+                    <td class="text-end valor-col">R$ {{ totais|get_item:chave_prev|default:0|floatformat:2 }}</td>
+                    <td class="text-end valor-col">R$ {{ totais|get_item:chave_real|default:0|floatformat:2 }}</td>
+                  {% endwith %}
+                {% endfor %}
+                <!-- Totais anuais do centro -->
+                {% with realizado_total=totais|get_item:"realizado_total"|default:0 previsto_total=totais|get_item:"previsto_total"|default:0 %}
+                <td class="text-end valor-col bg-primary text-white">R$ {{ totais|get_item:"ano_anterior_total"|default:0|floatformat:2 }}</td>
+                <td class="text-end valor-col bg-primary text-white">R$ {{ previsto_total|floatformat:2 }}</td>
+                <td class="text-end valor-col bg-primary text-white {{ realizado_total|get_valor_color:previsto_total }}">R$ {{ realizado_total|floatformat:2 }}</td>
+                {% endwith %}
+            </tr>
+          {% endfor %}
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  {% elif request.method == "POST" %}
+    <div class="alert alert-warning text-center mt-4">⚠️ Nenhum resultado encontrado para os filtros aplicados.</div>
+  {% endif %}
+</div>
+
+  <script>
+    // Autocomplete para centro de resultados
+    document.addEventListener('DOMContentLoaded', function() {
+      const centroSelect = document.getElementById('centro-select');
+      const centroSearch = document.getElementById('centro-search');
+
+      // Se o usuário não tem centros permitidos, não inicializa autocomplete
+      if (!centroSelect || centroSelect.disabled) {
+        return;
+      }
+      
+      // Criar container para autocomplete
+      const container = centroSearch.parentElement;
+      container.classList.add('autocomplete-container');
+      
+      // Criar div para resultados do autocomplete
+      const autocompleteResults = document.createElement('div');
+      autocompleteResults.className = 'autocomplete-results';
+      container.appendChild(autocompleteResults);
+      
+      // Definir valor inicial do campo de pesquisa
+      if (centroSelect.value) {
+        const selectedOption = centroSelect.options[centroSelect.selectedIndex];
+        if (selectedOption && selectedOption.text) {
+          centroSearch.value = selectedOption.text;
+        }
+      }
+      
+      // Função para filtrar opções
+      function filterOptions(searchTerm) {
+        const options = Array.from(centroSelect.options);
+        const filtered = options.filter(option => 
+          option.text.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          option.value.toLowerCase().includes(searchTerm.toLowerCase())
+        );
+        
+        return filtered;
+      }
+      
+      // Função para mostrar resultados
+      function showResults(results) {
+        autocompleteResults.innerHTML = '';
+        
+        if (results.length === 0) {
+          autocompleteResults.style.display = 'none';
+          return;
+        }
+        
+        results.forEach((option, index) => {
+          const item = document.createElement('div');
+          item.className = 'autocomplete-item';
+          item.textContent = option.text;
+          item.dataset.value = option.value;
+          
+          item.addEventListener('click', function() {
+            centroSelect.value = this.dataset.value;
+            centroSearch.value = this.textContent;
+            autocompleteResults.style.display = 'none';
+          });
+          
+          autocompleteResults.appendChild(item);
+        });
+        
+        autocompleteResults.style.display = 'block';
+      }
+      
+      // Event listener para digitação
+      centroSearch.addEventListener('input', function() {
+        const searchTerm = this.value;
+        const results = filterOptions(searchTerm);
+        showResults(results);
+      });
+      
+      // Event listener para foco
+      centroSearch.addEventListener('focus', function() {
+        const searchTerm = this.value;
+        const results = filterOptions(searchTerm);
+        showResults(results);
+      });
+      
+      // Event listener para teclas especiais
+      centroSearch.addEventListener('keydown', function(e) {
+        const items = autocompleteResults.querySelectorAll('.autocomplete-item');
+        const selected = autocompleteResults.querySelector('.autocomplete-item.selected');
+        
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          if (selected) {
+            selected.classList.remove('selected');
+            const next = selected.nextElementSibling;
+            if (next) next.classList.add('selected');
+            else if (items.length > 0) items[0].classList.add('selected');
+          } else if (items.length > 0) {
+            items[0].classList.add('selected');
+          }
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          if (selected) {
+            selected.classList.remove('selected');
+            const prev = selected.previousElementSibling;
+            if (prev) prev.classList.add('selected');
+            else if (items.length > 0) items[items.length - 1].classList.add('selected');
+          } else if (items.length > 0) {
+            items[items.length - 1].classList.add('selected');
+          }
+        } else if (e.key === 'Enter') {
+          e.preventDefault();
+          if (selected) {
+            selected.click();
+          }
+        } else if (e.key === 'Escape') {
+          autocompleteResults.style.display = 'none';
+        }
+      });
+      
+      // Esconder resultados quando clicar fora
+      document.addEventListener('click', function(e) {
+        if (!container.contains(e.target)) {
+          autocompleteResults.style.display = 'none';
+        }
+      });
+    });
+  </script>
+  
+  <script>
+    // Script para exportar Excel com os parâmetros do formulário
+    document.getElementById('btn-exportar-excel')?.addEventListener('click', function() {
+      const form = document.querySelector('form');
+      if (!form) return;
+      
+      const ano = form.querySelector('[name="ano"]')?.value || '{{ ano_atual }}';
+      const empresa = form.querySelector('[name="empresa"]')?.value || '';
+      const centro = form.querySelector('[name="centro"]')?.value || '';
+      
+      // Construir URL com parâmetros
+      let url = '{% url "exportar_excel" %}?ano=' + encodeURIComponent(ano);
+      if (empresa) {
+        url += '&empresa=' + encodeURIComponent(empresa);
+      }
+      if (centro) {
+        url += '&centro=' + encodeURIComponent(centro);
+      }
+      
+      // Abrir em nova aba para download
+      window.location.href = url;
+    });
+  </script>
+
+  {% if pode_aprovar_liberacao %}
+  <script>
+    // Polling do badge de liberações pendentes (60s)
+    async function atualizarBadgePendentes() {
+      try {
+        const r = await fetch("{% url 'liberacao_count' %}", { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+        const data = await r.json();
+        const badge = document.getElementById('badge-pendentes');
+        if (!badge) return;
+        if (data.count && data.count > 0) {
+          badge.textContent = data.count;
+          badge.style.display = 'inline-block';
+        } else {
+          badge.style.display = 'none';
+        }
+      } catch (e) {
+        console.warn('Erro ao buscar contador de liberações:', e);
+      }
+    }
+    atualizarBadgePendentes();
+    setInterval(atualizarBadgePendentes, 60000);
+  </script>
+  {% endif %}
+</body>
+</html>

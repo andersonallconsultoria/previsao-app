@@ -198,9 +198,9 @@ def login_view(request):
     }
     return render(request, 'login.html', context)
 
-# Painel principal
+# Painel legado (versão anterior do layout — mantido em /painel-legado/ para comparação)
 @token_required
-def painel_view(request):
+def painel_legado_view(request):
     headers = get_api_headers()
 
     username = request.session.get('username', '')
@@ -250,7 +250,7 @@ def painel_view(request):
     if request.method == 'POST':
         # Bloqueado: não processa pesquisa
         if sem_centros_permitidos:
-            return render(request, 'painel.html', {
+            return render(request, 'painel_legado.html', {
                 'empresas': empresas,
                 'centros': centros,
                 'resultados': resultados,
@@ -275,7 +275,7 @@ def painel_view(request):
         # Validar se o centro solicitado é permitido
         if tem_lista_permitida and not centro:
             mensagem_bloqueio = "Selecione um centro de resultado permitido para continuar."
-            return render(request, 'painel.html', {
+            return render(request, 'painel_legado.html', {
                 'empresas': empresas,
                 'centros': centros,
                 'resultados': resultados,
@@ -295,7 +295,7 @@ def painel_view(request):
 
         if centro and centros_permitidos_ids and int(centro) not in centros_permitidos_ids:
             mensagem_bloqueio = "Você não tem permissão para acessar este centro de resultado."
-            return render(request, 'painel.html', {
+            return render(request, 'painel_legado.html', {
                 'empresas': empresas,
                 'centros': centros,
                 'resultados': resultados,
@@ -501,7 +501,7 @@ def painel_view(request):
     tem_acesso_configuracao = usuario_tem_acesso_configuracao(username)
     pode_aprovar_liberacao_flag = usuario_pode_aprovar_liberacao(username)
 
-    return render(request, 'painel.html', {
+    return render(request, 'painel_legado.html', {
         'pode_aprovar_liberacao': pode_aprovar_liberacao_flag,
         'empresas': empresas,
         'centros': centros,
@@ -2854,16 +2854,16 @@ def liberacao_count_ajax(request):
     return JsonResponse({'count': liberacoes_service.count_pendentes()})
 
 
-# ==================== PAINEL V2 (NOVO LAYOUT - BETA) ====================
+# ==================== PAINEL PRINCIPAL (LAYOUT NOVO) ====================
 
 @token_required
-def painel_v2_view(request):
-    """Nova versão do painel com cards de KPI, tabela com colunas colapsáveis
-    e painel lateral com análise contextual.
+def painel_view(request):
+    """Painel principal: cards de KPI, tabela por conta contábil com colunas
+    mensais colapsáveis e painel lateral com análise contextual.
 
-    Mesma fonte de dados do painel atual (centro_resultado_bi).
-    Calcula no Python apenas o necessário pro template; cards e painel lateral
-    são derivados no JS a partir do dataset entregue.
+    Fonte de dados: centro_resultado_bi (mesma do antigo).
+    Cálculos derivados (cards, painel lateral, mini chart) são feitos no JS
+    a partir do dataset entregue, sem chamadas extras à API.
     """
     headers = get_api_headers()
     username = request.session.get('username', '')
@@ -2979,4 +2979,4 @@ def painel_v2_view(request):
         'tem_acesso_configuracao': usuario_tem_acesso_configuracao(username),
         'pode_aprovar_liberacao': usuario_pode_aprovar_liberacao(username),
     }
-    return render(request, 'painel_v2.html', context)
+    return render(request, 'painel.html', context)

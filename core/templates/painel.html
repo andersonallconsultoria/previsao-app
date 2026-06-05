@@ -1,901 +1,521 @@
 <!DOCTYPE html>
-<html lang="pt-br">
+<html lang="pt-BR">
 <head>
-  <meta charset="UTF-8">
-  <title>Painel - Sistema de Previsão</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>COE - Controle de Orçamento Empresarial</title>
   <style>
-    th, td { white-space: nowrap; }
-    
-    /* Container para scroll vertical */
-    .table-container {
-      max-height: 600px;
-      overflow-y: auto;
-      overflow-x: auto;
+    :root {
+      --coe-blue: #004AAD; --coe-blue-2: #0f63ff; --coe-teal: #1ABC9C; --coe-teal-dark: #159b8d;
+      --coe-orange: #FF6B00; --coe-dark: #343a40; --coe-dark-2: #495057; --coe-bg: #eef3f8;
+      --coe-card: #ffffff; --coe-line: #d9e1ea; --coe-text: #1f2d3d; --coe-muted: #667085;
+      --coe-green: #198754; --coe-red: #dc3545; --coe-yellow: #ffc107;
+      --shadow: 0 16px 40px rgba(0,42,98,.18); --soft-shadow: 0 8px 24px rgba(0,42,98,.11);
+      --radius: 16px; --account-width: 360px;
     }
-    
-    /* Cabeçalho fixo - PRIMEIRA LINHA */
-    .sticky-header > tr:first-child th {
-      position: sticky;
-      top: 0;
-      background: #343a40 !important;
-      color: white !important;
-      z-index: 102;
-      box-shadow: 0 2px 2px -1px rgba(0, 0, 0, 0.4);
-    }
-    
-    /* Segunda linha do cabeçalho também fixa */
-    .sticky-header > tr:nth-child(2) th {
-      position: sticky;
-      top: 38px; /* Altura da primeira linha (reduzida) */
-      background: #495057 !important;
-      color: white !important;
-      z-index: 101;
-      box-shadow: 0 2px 2px -1px rgba(0, 0, 0, 0.4);
-    }
-    
-    /* Garante que a célula com rowspan ocupe as duas linhas sem linha branca */
-    .sticky-header th[rowspan="2"] {
-      vertical-align: top;
-    }
-    
-    /* Reduz padding geral do cabeçalho */
-    .sticky-header th {
-      padding: 4px 12px !important;
-    }
-    
-    .sticky-header > tr:first-child th {
-      padding: 6px 12px !important;
-    }
-    
-    .sticky-header > tr:nth-child(2) th {
-      padding: 2px 12px !important;
-      font-size: 11px;
-      height: 34px;
-      vertical-align: middle;
-    }
-    
-    /* Remover estilos customizados - usar padrão igual aos outros cabeçalhos */
-    .sub-header {
-      font-size: 12px;
-      font-weight: normal;
-    }
-    
-    /* Garante que o fundo laranja seja visível */
-    .bg-warning.bg-opacity-25 {
-      background-color: rgba(255, 193, 7, 0.3) !important;
-    }
-    
-    /* Adiciona cor laranja mais forte para teste */
-    .bg-laranja-previsto {
-      background-color: rgba(255, 165, 0, 0.4) !important;
-    }
-    .scroll-x {
-      overflow-x: auto;
-      width: 100%;
-    }
-    
-    .table {
-      width: 100% !important;
-      min-width: 100%;
-    }
-    
-    .container {
-      max-width: 100% !important;
-      padding-left: 15px;
-      padding-right: 15px;
-    }
-    
-    /* Paleta COE - Estilo dos filtros */
-    .filtros-section {
-      background: linear-gradient(135deg, #004AAD, #1ABC9C);
-      padding: 15px;
-      border-radius: 10px;
-      margin-bottom: 20px;
-      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    }
-    
-    .filtros-section .form-label {
-      color: white !important;
-      font-weight: 500;
-    }
-    
-    .filtros-section .form-select,
-    .filtros-section .form-control {
-      background-color: rgba(255, 255, 255, 0.95);
-      border: 1px solid rgba(255, 255, 255, 0.3);
-    }
-    
-    .filtros-section .form-select:focus,
-    .filtros-section .form-control:focus {
-      background-color: white;
-      border-color: rgba(255, 255, 255, 0.5);
-      box-shadow: 0 0 0 0.2rem rgba(255, 255, 255, 0.5);
-    }
-    
-    .filtros-section .btn-primary {
-      background-color: #FF6B00 !important;
-      color: #FFFFFF !important;
-      border: none !important;
-      font-weight: 500 !important;
-    }
-    
-    .filtros-section .btn-primary:hover {
-      background-color: #e85500 !important;
-      transform: translateY(-1px);
-      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-      color: #FFFFFF !important;
-    }
-    
-    .filtros-section .btn-success {
-      background-color: #546E7A !important;
-      color: #FFFFFF !important;
-      border: none !important;
-      font-weight: 500 !important;
-    }
-    
-    .filtros-section .btn-success:hover {
-      background-color: #455a64 !important;
-      transform: translateY(-1px);
-      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-      color: #FFFFFF !important;
-    }
-    
-    .filtros-section .btn-secondary {
-      background: rgba(255, 255, 255, 0.2);
-      color: white;
-      border: 1px solid rgba(255, 255, 255, 0.3);
-    }
-    
-    .filtros-section .btn-secondary:hover {
-      background: rgba(255, 255, 255, 0.3);
-      color: white;
-    }
-    
-    pre.debug-block {
-      background: #f8f9fa;
-      padding: 10px;
-      border: 1px dashed #ccc;
-      font-size: 12px;
-      max-height: 300px;
-      overflow: auto;
-    }
-    /* Cores alternadas para colunas de meses */
-    .mes-bg-1 { background-color: #f0f4f8 !important; }
-    .mes-bg-2 { background-color: #e2eafc !important; }
-    /* Espaço maior para colunas de valores */
-    .valor-col { min-width: 90px; }
-    
-    /* Estilos para totalizadores */
-    .totalizador-header {
-      background: linear-gradient(45deg, #343a40, #495057) !important;
-      color: white !important;
-      font-weight: bold;
-    }
-    
-    .totalizador-row {
-      background: linear-gradient(45deg, #fff3cd, #ffeaa7) !important;
-      font-weight: bold;
-    }
-    
-    .totalizador-row:hover {
-      background: linear-gradient(45deg, #ffeaa7, #fdcb6e) !important;
-    }
-    
-    /* Estilos para cabeçalhos de centro de resultados */
-    .centro-header {
-      background: linear-gradient(45deg, #2c3e50, #34495e) !important;
-      color: white !important;
-      font-weight: bold;
-      font-size: 1.1em;
-    }
-    
-    .centro-header td {
-      padding: 12px !important;
-    }
-    
-    /* Estilos para totalizadores de centro */
-    .totalizador-centro {
-      background: linear-gradient(45deg, #e74c3c, #c0392b) !important;
-      color: white !important;
-      font-weight: bold;
-    }
-    
-    .totalizador-centro:hover {
-      background: linear-gradient(45deg, #c0392b, #a93226) !important;
-    }
-    
-    /* Indentação para contas dentro de centros */
-    .ps-4 {
-      padding-left: 2rem !important;
-    }
-    
-    /* Estilos para autocomplete */
-    .autocomplete-wrapper {
-      position: relative;
-    }
-    
-    .autocomplete-container {
-      position: relative;
-    }
-    
-    .autocomplete-results {
-      position: absolute;
-      top: 100%;
-      left: 0;
-      right: 0;
-      background: white;
-      border: 1px solid #ddd;
-      border-top: none;
-      max-height: 200px;
-      overflow-y: auto;
-      z-index: 1000;
-      display: none;
-    }
-    
-    .autocomplete-item {
-      padding: 8px 12px;
-      cursor: pointer;
-      border-bottom: 1px solid #eee;
-    }
-    
-    .autocomplete-item:hover {
-      background-color: #f8f9fa;
-    }
-    
-    .autocomplete-item.selected {
-      background-color: #007bff;
-      color: white;
-    }
-    
-    /* Estilos para cores de valores realizados - DADOS NORMAIS (fundo branco/cinza) */
-    .bg-danger.bg-opacity-25 {
-      background-color: rgba(220, 53, 69, 0.25) !important;
-    }
-    
-    .bg-success.bg-opacity-25 {
-      background-color: rgba(25, 135, 84, 0.25) !important;
-    }
-    
-    /* Cores mais escuras APENAS para totais anuais (fundo azul) */
-    .bg-primary.bg-danger.bg-opacity-25 {
-      background-color: rgba(220, 53, 69, 0.85) !important;
-    }
-    
-    .bg-primary.bg-success.bg-opacity-25 {
-      background-color: rgba(25, 135, 84, 0.85) !important;
-    }
-    
-    /* Hover para células coloridas */
-    .bg-danger.bg-opacity-25:hover {
-      background-color: rgba(220, 53, 69, 0.35) !important;
-    }
-    
-    .bg-success.bg-opacity-25:hover {
-      background-color: rgba(25, 135, 84, 0.35) !important;
-    }
-    
-    /* Hover para totais anuais */
-    .bg-primary.bg-danger.bg-opacity-25:hover {
-      background-color: rgba(220, 53, 69, 0.95) !important;
-    }
-    
-    .bg-primary.bg-success.bg-opacity-25:hover {
-      background-color: rgba(25, 135, 84, 0.95) !important;
-    }
-    
-    /* Estilos para filtros compactos */
-    .form-control-sm, .form-select-sm {
-      font-size: 0.875rem;
-      padding: 0.25rem 0.5rem;
-    }
-    
-    .btn-sm {
-      font-size: 0.875rem;
-      padding: 0.25rem 0.5rem;
-    }
-    
-    .small {
-      font-size: 0.875rem;
-    }
-    
-    /* Campo de ano mais compacto */
-    input[name="ano"] {
-      max-width: 80px;
-      text-align: center;
-    }
-    
-    /* Fundo gradiente COE para toda a página */
-    body {
-      background: linear-gradient(135deg, #004AAD, #1ABC9C);
-      min-height: 100vh;
-    }
-    
-    /* Container principal com fundo transparente */
-    .container.py-5 {
-      background: transparent;
-    }
-    
-    /* Garante que a tabela tenha fundo branco */
-    .table-container,
-    .scroll-x {
-      background: white;
-      border-radius: 8px;
-      padding: 15px;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-    }
-    
-    /* Info box também com fundo branco */
-    .alert-info {
-      background: rgba(255, 255, 255, 0.95) !important;
-      border: 1px solid rgba(255, 255, 255, 0.3) !important;
-    }
-    
-    /* Título em branco para contrastar com o fundo gradiente */
-    h2 {
-      color: white !important;
-      text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-      font-weight: 600;
-    }
-    
-    h4 {
-      color: white !important;
-      text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-      font-weight: 500;
-    }
-    
-    /* Subtítulo "Mostrando" também em branco */
-    small {
-      color: rgba(255, 255, 255, 0.95) !important;
-    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Inter,Segoe UI,Roboto,Arial,sans-serif;color:var(--coe-text);
+         background:linear-gradient(135deg,var(--coe-blue) 0%,#0876b5 42%,var(--coe-teal) 100%);min-height:100vh}
+    .page{width:100%;padding:18px}
+    .topbar{display:flex;justify-content:space-between;align-items:center;gap:20px;color:#fff;margin-bottom:16px;flex-wrap:wrap}
+    .title-wrap h1{margin:0;font-size:28px;line-height:1.1;font-weight:800;letter-spacing:-.03em;text-shadow:0 2px 4px rgba(0,0,0,.24)}
+    .title-wrap p{margin:7px 0 0;font-size:13px;opacity:.92}
+    .user-info{font-size:13px;color:#fff;opacity:.92;margin-right:10px}
+
+    .btn{border:0;border-radius:10px;padding:10px 13px;font-size:13px;font-weight:750;cursor:pointer;
+         transition:.18s ease;display:inline-flex;align-items:center;justify-content:center;gap:7px;
+         white-space:nowrap;text-decoration:none;position:relative}
+    .btn:hover{transform:translateY(-1px);filter:brightness(.98)}
+    .btn-orange{background:var(--coe-orange);color:#fff}
+    .btn-steel{background:#546E7A;color:#fff}
+    .btn-blue{background:var(--coe-blue-2);color:#fff}
+    .btn-cyan{background:#17a2b8;color:#fff}
+    .btn-green{background:#16a34a;color:#fff}
+    .btn-grey{background:#6b7280;color:#fff}
+    .btn-purple{background:#7c3aed;color:#fff}
+    .btn-ghost{background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.28);color:#fff}
+    .btn-danger{background:var(--coe-red);color:#fff}
+    .btn-light{background:#fff;color:var(--coe-blue);border:1px solid #dce7f5}
+    .btn .badge-count{position:absolute;top:-6px;right:-6px;background:#ff7a00;color:#fff;border-radius:999px;
+                       padding:2px 7px;font-size:11px;font-weight:800;display:none}
+    .btn[disabled]{opacity:.5;cursor:not-allowed}
+
+    .filters{background:linear-gradient(135deg,rgba(0,74,173,.92),rgba(26,188,156,.90));
+             border:1px solid rgba(255,255,255,.18);border-radius:var(--radius);padding:16px;
+             box-shadow:var(--shadow);display:grid;grid-template-columns:minmax(230px,1fr) minmax(260px,1.5fr) 120px auto;
+             gap:12px;align-items:end;margin-bottom:14px}
+    .field label{display:block;color:#fff;font-size:12px;font-weight:750;margin-bottom:6px}
+    .field select,.field input{width:100%;border-radius:9px;border:1px solid rgba(255,255,255,.45);
+                                background:rgba(255,255,255,.96);padding:10px 11px;font-size:13px;color:#1b2b3d;outline:0}
+    .filter-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+
+    .context-line{color:#fff;font-size:13px;margin:10px 2px 14px;text-shadow:0 1px 2px rgba(0,0,0,.24);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+    .pill-warn{background:#fff7ed;color:#b54708;border:1px solid #fed7aa;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:800}
+    .pill-info{background:#f2f6ff;color:#264b9b;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:800}
+
+    .cards{display:grid;grid-template-columns:repeat(6,minmax(150px,1fr));gap:12px;margin-bottom:14px}
+    .card{background:rgba(255,255,255,.96);border:1px solid rgba(255,255,255,.7);border-radius:15px;
+          padding:14px;box-shadow:var(--soft-shadow);min-height:94px;position:relative;overflow:hidden}
+    .card::before{content:'';position:absolute;inset:0 0 auto 0;height:4px;background:linear-gradient(90deg,var(--coe-blue),var(--coe-teal))}
+    .card.danger::before{background:linear-gradient(90deg,var(--coe-red),#ff8a80)}
+    .card.success::before{background:linear-gradient(90deg,var(--coe-green),var(--coe-teal))}
+    .card.warning::before{background:linear-gradient(90deg,var(--coe-orange),var(--coe-yellow))}
+    .card .label{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--coe-muted);font-weight:850;margin-bottom:8px}
+    .card .value{font-size:21px;font-weight:850;letter-spacing:-.03em}
+    .card .hint{margin-top:6px;color:var(--coe-muted);font-size:12px}
+
+    .work-area{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:14px;align-items:start}
+    .main-panel,.side-panel{background:rgba(255,255,255,.97);border-radius:var(--radius);box-shadow:var(--shadow);border:1px solid rgba(255,255,255,.62)}
+    .main-panel-header{padding:14px;border-bottom:1px solid var(--coe-line);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+    .main-panel-header h2{margin:0;font-size:19px;display:flex;align-items:center;gap:8px;letter-spacing:-.02em}
+    .month-actions{display:flex;gap:8px;flex-wrap:wrap}
+
+    .table-wrap{max-height:620px;overflow:auto;border-radius:0 0 var(--radius) var(--radius);position:relative}
+    table{border-collapse:separate;border-spacing:0;min-width:1800px;width:max-content;background:#fff}
+    th,td{border-right:1px solid var(--coe-line);border-bottom:1px solid var(--coe-line);padding:10px 12px;
+          white-space:nowrap;font-size:13px;height:42px;vertical-align:middle}
+    thead th{position:sticky;top:0;background:var(--coe-dark);color:#fff;z-index:20;font-weight:800;text-align:center}
+    thead tr:nth-child(2) th{top:43px;background:var(--coe-dark-2);z-index:19;font-size:11px;height:38px;padding:7px 10px}
+    .account-head,.account-cell{position:sticky!important;left:0;width:var(--account-width);min-width:var(--account-width);
+                                 max-width:var(--account-width);z-index:30!important;box-shadow:4px 0 10px rgba(16,24,40,.08);text-align:left!important}
+    .account-head{background:#2f363d!important;color:#fff}
+    .account-cell{background:#fff;font-weight:800;cursor:pointer;white-space:normal;line-height:1.22}
+    thead .account-head{z-index:40!important}
+    tbody tr:nth-child(even) .account-cell,tbody tr:nth-child(even) td{background-color:#f7f9fc}
+    tbody tr:hover td,tbody tr:hover .account-cell{background-color:#edf6ff}
+    tbody tr.selected td,tbody tr.selected .account-cell{background:#e5f2ff!important;box-shadow:inset 4px 0 0 var(--coe-orange)}
+    .account-code{display:block;color:var(--coe-blue);font-size:12px;margin-bottom:2px}
+    .account-name{display:block;color:#111827}
+    .num{text-align:right;font-variant-numeric:tabular-nums}
+    .prev{background:#fff1bd!important}
+    .real.ok{background:rgba(25,135,84,.16)!important}
+    .real.bad{background:rgba(220,53,69,.17)!important;color:#7a1c23;font-weight:800}
+    .saldo.positive{color:#0f6848;font-weight:850}
+    .saldo.negative{color:#b42318;font-weight:900;background:rgba(220,53,69,.13)!important}
+    .percent.high{color:#b42318;font-weight:900}
+    .percent.medium{color:#a05a00;font-weight:900}
+    .percent.low{color:#0f6848;font-weight:850}
+    .month-title{min-width:360px;background:#3a4148!important;border-left:2px solid rgba(255,255,255,.24)}
+    .month-title.collapsed-title{min-width:150px}
+    .month-summary-head{min-width:150px;display:none}
+    .month-summary-cell{min-width:150px;display:none;text-align:right;font-weight:850;background:#eef4fb!important}
+    .month-detail{min-width:118px}
+    .month-toggle{margin-left:8px;border:1px solid rgba(255,255,255,.28);background:rgba(255,255,255,.14);color:#fff;
+                  border-radius:7px;font-size:11px;padding:3px 7px;cursor:pointer;font-weight:900}
+    .collapsed .month-detail{display:none}
+    .collapsed .month-summary-head,.collapsed .month-summary-cell{display:table-cell}
+
+    .badge{display:inline-flex;align-items:center;border-radius:999px;padding:5px 8px;font-size:11px;font-weight:850;gap:4px}
+    .badge.ok{color:#0f6848;background:rgba(25,135,84,.12)}
+    .badge.warn{color:#985300;background:rgba(255,193,7,.25)}
+    .badge.bad{color:#b42318;background:rgba(220,53,69,.13)}
+
+    .total-row td,.total-row .account-cell{background:linear-gradient(45deg,#fff4d4,#ffe29b)!important;font-weight:900}
+
+    .side-panel{padding:0;position:sticky;top:14px;overflow:hidden}
+    .side-head{background:linear-gradient(135deg,var(--coe-blue),var(--coe-teal));color:#fff;padding:16px}
+    .side-head .eyebrow{font-size:11px;font-weight:850;letter-spacing:.08em;text-transform:uppercase;opacity:.82}
+    .side-head h3{margin:7px 0 0;font-size:18px;line-height:1.2}
+    .side-body{padding:16px}
+    .panel-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:15px}
+    .panel-metric{border:1px solid var(--coe-line);border-radius:12px;padding:10px;background:#f8fbff}
+    .panel-metric span{display:block;font-size:11px;color:var(--coe-muted);font-weight:800;margin-bottom:5px}
+    .panel-metric strong{font-size:14px}
+    .progress-wrap{margin:14px 0 16px;background:#e7edf5;height:12px;border-radius:999px;overflow:hidden}
+    .progress-bar{height:100%;width:0%;background:linear-gradient(90deg,var(--coe-blue),var(--coe-teal));border-radius:999px;transition:width .25s ease}
+    .mini-chart{display:flex;align-items:end;gap:5px;height:96px;padding:10px 6px 4px;border-radius:12px;background:#f6f8fb;border:1px solid var(--coe-line)}
+    .bar-pair{display:flex;align-items:end;gap:2px;flex:1;height:100%;justify-content:center}
+    .bar{width:7px;border-radius:5px 5px 0 0;min-height:4px}
+    .bar.prev-bar{background:#ffd166}
+    .bar.real-bar{background:var(--coe-blue-2)}
+    .bar.real-bar.over{background:var(--coe-red)}
+    .legend{display:flex;gap:10px;margin-top:8px;font-size:11px;color:var(--coe-muted)}
+    .dot{width:9px;height:9px;border-radius:50%;display:inline-block;margin-right:4px}
+    .dot.prev{background:#ffd166}
+    .dot.real{background:var(--coe-blue-2)}
+    .note-list{margin:14px 0 0;padding:0;list-style:none;display:grid;gap:8px}
+    .note-list li{font-size:12px;color:#3d4a5c;background:#f5f7fb;border:1px solid var(--coe-line);padding:9px;border-radius:10px}
+
+    .empty-state{padding:48px 16px;text-align:center;color:var(--coe-muted)}
+    .empty-state h3{margin:0 0 8px;font-size:20px;color:var(--coe-text)}
+
+    @media (max-width:1280px){.cards{grid-template-columns:repeat(3,1fr)}.work-area{grid-template-columns:1fr}.side-panel{position:static}}
+    @media (max-width:760px){.page{padding:10px}.filters{grid-template-columns:1fr}.cards{grid-template-columns:1fr}
+                              .filter-actions{align-items:stretch}.filter-actions .btn{flex:1}
+                              :root{--account-width:285px}.title-wrap h1{font-size:22px}}
   </style>
 </head>
 <body>
-{% load custom_filters %}
-
-<div class="container py-5">
-  <div class="d-flex justify-content-between align-items-center mb-3">
-    <h2>Controle de Orçamento Empresarial</h2>
-    <div>
-      <a href="{% url 'logout' %}" class="btn btn-danger btn-sm" style="background-color: #dc3545 !important; color: white !important; border: none; font-weight: 500;">🚪 Sair</a>
+<main class="page">
+  <header class="topbar">
+    <div class="title-wrap">
+      <h1>Controle de Orçamento Empresarial</h1>
+      <p>{{ request.session.username|default:"Usuário" }} • {{ ano }}</p>
     </div>
-  </div>
-
-  {% if sem_centros_permitidos %}
-    <div class="alert alert-danger">
-      {{ mensagem_bloqueio|default:"Usuário não tem centro de resultados relacionado. Contate o administrador." }}
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      {% if pode_gerenciar_usuarios %}
+        <a href="{% url 'configuracao_usuarios' %}" class="btn btn-purple">👥 Config. Usuários</a>
+      {% endif %}
+      <a href="{% url 'logout' %}" class="btn btn-danger">🚪 Sair</a>
     </div>
-  {% endif %}
+  </header>
 
-  <form method="post" class="filtros-section">
-    {% csrf_token %}
-    <div class="row g-2 align-items-end">
-      <div class="col-md-2">
-        <label class="form-label small mb-1">Empresa</label>
-        <select name="empresa" class="form-select form-select-sm" {% if sem_centros_permitidos %}disabled{% endif %}>
+  <form method="get" id="filtersForm" action="{% url 'painel' %}">
+    <section class="filters" aria-label="Filtros do COE">
+      <div class="field">
+        <label for="empresa">Empresa</label>
+        <select id="empresa" name="empresa">
           <option value="">Todas</option>
           {% for emp in empresas %}
-            <option value="{{ emp.idempresa }}" {% if request.POST.empresa == emp.idempresa|stringformat:"s" %}selected{% endif %}>{{ emp.empresa }}</option>
+            <option value="{{ emp.idempresa }}" {% if empresa|stringformat:"s" == emp.idempresa|stringformat:"s" %}selected{% endif %}>{{ emp.empresa }}</option>
           {% endfor %}
         </select>
       </div>
-      <div class="col-md-3">
-        <label class="form-label small mb-1">Centro de Resultado</label>
-        <div class="autocomplete-wrapper">
-          <input type="text" id="centro-search" class="form-control form-control-sm" placeholder="Digite para pesquisar centros..." autocomplete="off" {% if sem_centros_permitidos %}disabled{% endif %}>
-          <select name="centro" class="form-select form-select-sm" id="centro-select" style="display: none;" {% if sem_centros_permitidos %}disabled{% endif %}>
-          {% if tem_lista_permitida and centros|length > 1 %}
-            <option value="" selected>Selecione um centro</option>
-          {% elif not tem_lista_permitida %}
-            <option value="">Todos</option>
-          {% endif %}
+      <div class="field">
+        <label for="centro">Centro de Resultado</label>
+        <select id="centro" name="centro" {% if sem_centros_permitidos %}disabled{% endif %}>
+          {% if not tem_lista_permitida %}<option value="">Todos</option>{% endif %}
           {% for cr in centros %}
             <option value="{{ cr.idcentroresultado }}"
-              {% if request.POST.centro == cr.idcentroresultado|stringformat:"s" %}
-                selected
-              {% elif request.method != "POST" and centro_preselect_id and centro_preselect_id == cr.idcentroresultado %}
-                selected
-              {% endif %}
-            >{{ cr.centroresultados }}</option>
+              {% if centro|stringformat:"s" == cr.idcentroresultado|stringformat:"s" %}selected{% elif not centro and centro_preselect_id and centro_preselect_id == cr.idcentroresultado %}selected{% endif %}>
+              {{ cr.centroresultados }}
+            </option>
           {% endfor %}
         </select>
       </div>
+      <div class="field">
+        <label for="ano">Ano</label>
+        <input id="ano" name="ano" type="number" value="{{ ano }}" />
       </div>
-      <div class="col-md-1">
-        <label class="form-label small mb-1">Ano</label>
-        <input type="number" name="ano" class="form-control form-control-sm" value="{{ request.POST.ano|default:ano_atual }}" required {% if sem_centros_permitidos %}disabled{% endif %}>
-      </div>
-      <div class="col-md-2">
-        <button type="submit" class="btn btn-primary btn-sm" {% if sem_centros_permitidos %}disabled{% endif %}>🔍 Pesquisar</button>
+      <div class="filter-actions">
+        <button type="submit" class="btn btn-orange" id="btnPesquisar">🔍 Pesquisar</button>
         {% if tem_acesso_configuracao %}
-        <a href="{% url 'configuracao' %}" class="btn btn-success btn-sm ms-1">🔧 Configuração</a>
+          <a href="{% url 'configuracao' %}" class="btn btn-steel">🛠 Configuração</a>
         {% endif %}
-        <a href="{% url 'dre' %}" class="btn btn-sm ms-1" style="background-color: #0f63ff !important; color: white !important;">📊 DRE</a>
-        <a href="{% url 'liberacoes_minhas' %}" class="btn btn-sm ms-1" style="background-color: #6b7280 !important; color: white !important;">📋 Minhas Solicitações</a>
+        <a href="{% url 'dre' %}" class="btn btn-blue">📊 DRE</a>
+        <a href="{% url 'liberacoes_minhas' %}" class="btn btn-grey">📋 Minhas Solicitações</a>
         {% if pode_aprovar_liberacao %}
-        <a href="{% url 'liberacoes_aprovar' %}" class="btn btn-sm ms-1 position-relative" style="background-color: #16a34a !important; color: white !important;">
-          ✅ Aprovar Liberações
-          <span id="badge-pendentes" class="position-absolute top-0 start-100 translate-middle badge rounded-pill" style="background-color: #ff7a00 !important; display:none;">0</span>
-        </a>
+          <a href="{% url 'liberacoes_aprovar' %}" class="btn btn-green">
+            ✅ Aprovar Liberações
+            <span id="badge-pendentes" class="badge-count">0</span>
+          </a>
         {% endif %}
-        <button type="button" id="btn-exportar-excel" class="btn btn-info btn-sm ms-1" style="background-color: #17a2b8 !important; color: white !important; display: none;" {% if sem_centros_permitidos %}disabled{% endif %}>📊 Exportar para Excel</button>
-        {% if pode_gerenciar_usuarios %}
-        <a href="{% url 'configuracao_usuarios' %}" class="btn btn-info btn-sm ms-1">👥 Config. Usuários</a>
-        {% endif %}
+        <button type="button" class="btn btn-cyan" id="btnExportar" {% if not consultou %}disabled{% endif %}>📤 Exportar Excel</button>
       </div>
-    </div>
+    </section>
   </form>
 
-  {% if request.method == "POST" %}
-    <div class="mb-2">
-      <small style="color: white !important; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);">
-        📌 <strong>Filtros:</strong> Ano: {{ request.POST.ano }} | 
-        Empresa: {{ request.POST.empresa|default:"(Todas)" }} | 
-        Centro: {{ request.POST.centro|default:"(Todos)" }}
-      </small>
+  <div class="context-line" id="contextLine">
+    <span>📌 <strong>Filtros:</strong> Ano: {{ ano }} | Empresa: {{ empresa|default:"Todas" }} | Centro: {{ centro|default:"Todos" }}</span>
+    {% if consultou %}
+      <span class="pill-info">📦 {{ contas_json|length }} bytes recebidos</span>
+    {% endif %}
+    {% if erro_api %}
+      <span class="pill-warn">⚠ {{ erro_api }}</span>
+    {% endif %}
+    {% if sem_centros_permitidos %}
+      <span class="pill-warn">⚠ Sem centros vinculados ao seu usuário</span>
+    {% endif %}
+  </div>
+
+  {% if consultou %}
+    <section class="cards" id="cards"></section>
+
+    <section class="work-area">
+      <div class="main-panel">
+        <div class="main-panel-header">
+          <h2>📋 Tabela Agrupada por Conta Contábil</h2>
+          <div class="month-actions">
+            <button class="btn btn-light" id="expandAll">⤴️ Expandir todos os meses</button>
+            <button class="btn btn-light" id="collapseAll">⤤ Recolher todos os meses</button>
+          </div>
+        </div>
+        <div class="table-wrap" id="tableWrap">
+          <table id="budgetTable" aria-label="Tabela orçamentária por conta contábil">
+            <thead id="tableHead"></thead>
+            <tbody id="tableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <aside class="side-panel" aria-label="Painel lateral de análise">
+        <div class="side-head">
+          <div class="eyebrow" id="panelEyebrow">Análise do Centro de Resultado</div>
+          <h3 id="panelTitle">—</h3>
+        </div>
+        <div class="side-body">
+          <div class="panel-grid" id="panelMetrics"></div>
+          <div>
+            <strong id="progressLabel">Consumo do orçamento</strong>
+            <div class="progress-wrap"><div class="progress-bar" id="progressBar"></div></div>
+          </div>
+          <div class="mini-chart" id="miniChart"></div>
+          <div class="legend"><span><i class="dot prev"></i>Previsto</span><span><i class="dot real"></i>Realizado</span></div>
+          <ul class="note-list" id="panelNotes"></ul>
+        </div>
+      </aside>
+    </section>
+  {% else %}
+    <div class="main-panel" style="padding:0;">
+      <div class="empty-state">
+        <h3>👋 Selecione os filtros e clique em Pesquisar</h3>
+        <p>{% if sem_centros_permitidos %}Você não tem centros vinculados. Contate o administrador.{% else %}Os dados aparecerão aqui com cards de KPI, tabela detalhada e painel de análise.{% endif %}</p>
+      </div>
     </div>
-    <script>
-      // Mostrar botão de exportar após pesquisa
-      document.addEventListener('DOMContentLoaded', function() {
-        const btnExportar = document.getElementById('btn-exportar-excel');
-        if (btnExportar) {
-          btnExportar.style.display = 'inline-block';
-        }
-      });
-    </script>
   {% endif %}
+</main>
 
-  {% if agrupar_por_centro and agrupado_por_centro %}
-    <h4 class="mb-3">📊 Controle de Orçamento por Centro de Resultados</h4>
-    <div class="scroll-x table-container">
-      <table class="table table-bordered table-sm table-striped">
-        <thead class="table-dark sticky-header">
-          <tr>
-            <th rowspan="2">Centro de Resultados / Conta Contábil</th>
-            {% for mes_num, mes_nome in meses %}
-              <th colspan="3" class="text-center">{{ mes_nome }} / {{ request.POST.ano|default_if_none:"2025" }}</th>
-            {% endfor %}
-            <th colspan="3" class="text-center bg-primary text-white">TOTAIS ANUAIS</th>
-          </tr>
-          <tr>
-            {% for _ in meses %}
-              <th class="sub-header text-center">Ano Ant.</th>
-              <th class="sub-header text-center">Previsto</th>
-              <th class="sub-header text-center">Realizado</th>
-            {% endfor %}
-            <th class="sub-header text-center bg-primary text-white">Ano Ant.</th>
-            <th class="sub-header text-center bg-primary text-white">Previsto</th>
-            <th class="sub-header text-center bg-primary text-white">Realizado</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for centro, contas in agrupado_por_centro.items %}
-            <!-- Cabeçalho do Centro de Resultados -->
-            <tr class="centro-header">
-              <td colspan="{{ meses|calcular_colspan|add:3 }}" class="text-center">
-                <strong>🏢 {{ centro }}</strong>
-              </td>
-            </tr>
-            
-            <!-- Contas do Centro -->
-            {% for conta, dados_mes in contas.items %}
-              <tr>
-                <td class="ps-4"><strong>{{ conta }}</strong></td>
-                {% for mes_num, _ in meses %}
-                  {% with mes_dados=dados_mes|get_item:mes_num %}
-                    {% if mes_dados %}
-                      <td class="text-end valor-col {% if forloop.counter0|divisibleby:2 %}mes-bg-1{% else %}mes-bg-2{% endif %}">R$ {{ mes_dados.ano_anterior|floatformat:2 }}</td>
-                      <td class="text-end valor-col {% if forloop.counter0|divisibleby:2 %}mes-bg-1{% else %}mes-bg-2{% endif %} {{ mes_dados.previsto|get_previsto_color:mes_dados.ano_anterior }}">R$ {{ mes_dados.previsto|floatformat:2 }}</td>
-                      <td class="text-end valor-col {% if forloop.counter0|divisibleby:2 %}mes-bg-1{% else %}mes-bg-2{% endif %} {{ mes_dados.realizado|get_valor_color:mes_dados.previsto }}">R$ {{ mes_dados.realizado|floatformat:2 }}</td>
-                    {% else %}
-                      <td class="text-end valor-col {% if forloop.counter0|divisibleby:2 %}mes-bg-1{% else %}mes-bg-2{% endif %}">R$ 0,00</td>
-                      <td class="text-end valor-col {% if forloop.counter0|divisibleby:2 %}mes-bg-1{% else %}mes-bg-2{% endif %}">R$ 0,00</td>
-                      <td class="text-end valor-col {% if forloop.counter0|divisibleby:2 %}mes-bg-1{% else %}mes-bg-2{% endif %}">R$ 0,00</td>
-                    {% endif %}
-                  {% endwith %}
-                {% endfor %}
-                <!-- Totais anuais da conta -->
-                {% with realizado_total=totais_anuais_conta|get_item:conta|get_item:"realizado_total"|default:0 previsto_total=totais_anuais_conta|get_item:conta|get_item:"previsto_total"|default:0 ano_anterior_total=totais_anuais_conta|get_item:conta|get_item:"ano_anterior_total"|default:0 %}
-                <td class="text-end valor-col bg-primary text-white">R$ {{ ano_anterior_total|floatformat:2 }}</td>
-                <td class="text-end valor-col bg-primary text-white {{ previsto_total|get_previsto_color:ano_anterior_total }}">R$ {{ previsto_total|floatformat:2 }}</td>
-                <td class="text-end valor-col bg-primary text-white {{ realizado_total|get_valor_color:previsto_total }}">R$ {{ realizado_total|floatformat:2 }}</td>
-                {% endwith %}
-              </tr>
-            {% endfor %}
-            
-            <!-- Totalizador do Centro -->
-            <tr class="totalizador-centro">
-              <td><strong>💰 TOTAL {{ centro }}</strong></td>
-              {% for mes_num, _ in meses %}
-                {% with chave_ano=mes_num|add:"_ano_anterior" chave_prev=mes_num|add:"_previsto" chave_real=mes_num|add:"_realizado" %}
-                  <td class="text-end valor-col">R$ {{ totalizadores_centro|get_item:centro|get_item:chave_ano|default:0|floatformat:2 }}</td>
-                  <td class="text-end valor-col">R$ {{ totalizadores_centro|get_item:centro|get_item:chave_prev|default:0|floatformat:2 }}</td>
-                  <td class="text-end valor-col">R$ {{ totalizadores_centro|get_item:centro|get_item:chave_real|default:0|floatformat:2 }}</td>
-                {% endwith %}
-              {% endfor %}
-              <!-- Totais anuais do centro -->
-              {% with realizado_total=totalizadores_centro|get_item:centro|get_item:"realizado_total"|default:0 previsto_total=totalizadores_centro|get_item:centro|get_item:"previsto_total"|default:0 ano_anterior_total=totalizadores_centro|get_item:centro|get_item:"ano_anterior_total"|default:0 %}
-              <td class="text-end valor-col bg-primary text-white">R$ {{ ano_anterior_total|floatformat:2 }}</td>
-              <td class="text-end valor-col bg-primary text-white {{ previsto_total|get_previsto_color:ano_anterior_total }}">R$ {{ previsto_total|floatformat:2 }}</td>
-              <td class="text-end valor-col bg-primary text-white {{ realizado_total|get_valor_color:previsto_total }}">R$ {{ realizado_total|floatformat:2 }}</td>
-              {% endwith %}
-            </tr>
-            
-            <!-- Espaçador entre centros -->
-            <tr class="espacador">
-              <td colspan="{{ meses|calcular_colspan|add:3 }}" style="height: 10px; background-color: #f8f9fa;"></td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  {% elif agrupado_por_empresa %}
-    <h4 class="mb-3">📊 Controle de Orçamento por Empresa</h4>
-    <div class="scroll-x table-container">
-      <table class="table table-bordered table-sm table-striped agrupado-por-empresa">
-        <thead class="table-dark sticky-header">
-          <tr>
-            <th rowspan="2">Empresa / Conta Contábil</th>
-            {% for mes_num, mes_nome in meses %}
-              <th colspan="3" class="text-center">{{ mes_nome }} / {{ request.POST.ano|default_if_none:"2025" }}</th>
-            {% endfor %}
-            <th colspan="3" class="text-center bg-primary text-white">TOTAIS ANUAIS</th>
-          </tr>
-          <tr>
-            {% for _ in meses %}
-              <th class="sub-header text-center">Ano Ant.</th>
-              <th class="sub-header text-center">Previsto</th>
-              <th class="sub-header text-center">Realizado</th>
-            {% endfor %}
-            <th class="sub-header text-center bg-primary text-white">Ano Ant.</th>
-            <th class="sub-header text-center bg-primary text-white">Previsto</th>
-            <th class="sub-header text-center bg-primary text-white">Realizado</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for empresa, contas in agrupado_por_empresa.items %}
-            <!-- Cabeçalho da Empresa - linha separada como na imagem -->
-            <tr class="centro-header" style="background: #6c757d !important; color: white !important;">
-              <td class="text-left" style="padding: 8px 15px !important; font-size: 1em !important; font-weight: bold !important;">
-                <strong>🏢 {{ empresa|default:"Empresa não identificada" }}</strong>
-              </td>
-              <td colspan="{{ meses|calcular_colspan|add:2 }}" style="background: #6c757d !important;"></td>
-            </tr>
-            
-            <!-- Contas da Empresa -->
-            {% for conta, dados_mes in contas.items %}
-              <tr>
-                <td class="ps-4"><strong>{{ conta }}</strong></td>
-                {% for mes_num, _ in meses %}
-                  {% with mes_dados=dados_mes|get_item:mes_num %}
-                    {% if mes_dados %}
-                      <td class="text-end valor-col {% if forloop.counter0|divisibleby:2 %}mes-bg-1{% else %}mes-bg-2{% endif %}">R$ {{ mes_dados.ano_anterior|floatformat:2 }}</td>
-                      <td class="text-end valor-col {% if forloop.counter0|divisibleby:2 %}mes-bg-1{% else %}mes-bg-2{% endif %} {{ mes_dados.previsto|get_previsto_color:mes_dados.ano_anterior }}">R$ {{ mes_dados.previsto|floatformat:2 }}</td>
-                      <td class="text-end valor-col {% if forloop.counter0|divisibleby:2 %}mes-bg-1{% else %}mes-bg-2{% endif %} {{ mes_dados.realizado|get_valor_color:mes_dados.previsto }}">R$ {{ mes_dados.realizado|floatformat:2 }}</td>
-                    {% else %}
-                      <td class="text-end valor-col {% if forloop.counter0|divisibleby:2 %}mes-bg-1{% else %}mes-bg-2{% endif %}">R$ 0,00</td>
-                      <td class="text-end valor-col {% if forloop.counter0|divisibleby:2 %}mes-bg-1{% else %}mes-bg-2{% endif %}">R$ 0,00</td>
-                      <td class="text-end valor-col {% if forloop.counter0|divisibleby:2 %}mes-bg-1{% else %}mes-bg-2{% endif %}">R$ 0,00</td>
-                    {% endif %}
-                  {% endwith %}
-                {% endfor %}
-                <!-- Totais anuais da conta - usar estrutura simplificada do backend -->
-                {% comment %} Buscar totais usando a chave empresa||conta {% endcomment %}
-                {% with chave_completa=empresa|concat:"||"|concat:conta %}
-                  {% with totais_conta=totais_anuais_conta|get_item:chave_completa %}
-                    {% if totais_conta %}
-                      <td class="text-end valor-col bg-primary text-white">R$ {{ totais_conta.ano_anterior_total|default:0|floatformat:2 }}</td>
-                      <td class="text-end valor-col bg-primary text-white {{ totais_conta.previsto_total|default:0|get_previsto_color:totais_conta.ano_anterior_total|default:0 }}">R$ {{ totais_conta.previsto_total|default:0|floatformat:2 }}</td>
-                      <td class="text-end valor-col bg-primary text-white {{ totais_conta.realizado_total|default:0|get_valor_color:totais_conta.previsto_total|default:0 }}">R$ {{ totais_conta.realizado_total|default:0|floatformat:2 }}</td>
-                    {% else %}
-                      <td class="text-end valor-col bg-primary text-white">R$ 0,00</td>
-                      <td class="text-end valor-col bg-primary text-white">R$ 0,00</td>
-                      <td class="text-end valor-col bg-primary text-white">R$ 0,00</td>
-                    {% endif %}
-                  {% endwith %}
-                {% endwith %}
-              </tr>
-            {% endfor %}
-            
-            <!-- Totalizador da Empresa -->
-            <tr class="totalizador-centro" style="background: linear-gradient(45deg, #e74c3c, #c0392b) !important; color: white !important;">
-              <td><strong>💰 TOTAL {{ empresa|default:"Empresa" }}</strong></td>
-              {% for mes_num, _ in meses %}
-                {% with chave_ano=mes_num|concat:"_ano_anterior" chave_prev=mes_num|concat:"_previsto" chave_real=mes_num|concat:"_realizado" %}
-                  <td class="text-end valor-col">R$ {{ totalizadores_empresa|get_item:empresa|get_item:chave_ano|default:0|floatformat:2 }}</td>
-                  <td class="text-end valor-col">R$ {{ totalizadores_empresa|get_item:empresa|get_item:chave_prev|default:0|floatformat:2 }}</td>
-                  <td class="text-end valor-col">R$ {{ totalizadores_empresa|get_item:empresa|get_item:chave_real|default:0|floatformat:2 }}</td>
-                {% endwith %}
-              {% endfor %}
-              <!-- Totais anuais da empresa -->
-              {% with realizado_total=totalizadores_empresa|get_item:empresa|get_item:"realizado_total"|default:0 previsto_total=totalizadores_empresa|get_item:empresa|get_item:"previsto_total"|default:0 ano_anterior_total=totalizadores_empresa|get_item:empresa|get_item:"ano_anterior_total"|default:0 %}
-              <td class="text-end valor-col bg-primary text-white">R$ {{ ano_anterior_total|floatformat:2 }}</td>
-              <td class="text-end valor-col bg-primary text-white {{ previsto_total|get_previsto_color:ano_anterior_total }}">R$ {{ previsto_total|floatformat:2 }}</td>
-              <td class="text-end valor-col bg-primary text-white {{ realizado_total|get_valor_color:previsto_total }}">R$ {{ realizado_total|floatformat:2 }}</td>
-              {% endwith %}
-            </tr>
-            
-            <!-- Espaçador entre empresas -->
-            <tr class="espacador">
-              <td colspan="{{ meses|calcular_colspan|add:3 }}" style="height: 10px; background-color: #f8f9fa;"></td>
-            </tr>
-          {% endfor %}
-          
-          <!-- Totalizador Geral (soma de todas as empresas) -->
-          <tr class="totalizador-geral" style="background: linear-gradient(45deg, #8e44ad, #6c3483) !important; color: white !important; font-size: 1.1em !important; font-weight: bold !important;">
-            <td><strong>🌟 TOTAL GERAL (TODAS AS EMPRESAS)</strong></td>
-            {% for mes_num, _ in meses %}
-              {% with chave_ano=mes_num|concat:"_ano_anterior" chave_prev=mes_num|concat:"_previsto" chave_real=mes_num|concat:"_realizado" %}
-                <td class="text-end valor-col">R$ {{ totalizadores_geral|get_item:chave_ano|default:0|floatformat:2 }}</td>
-                <td class="text-end valor-col">R$ {{ totalizadores_geral|get_item:chave_prev|default:0|floatformat:2 }}</td>
-                <td class="text-end valor-col">R$ {{ totalizadores_geral|get_item:chave_real|default:0|floatformat:2 }}</td>
-              {% endwith %}
-            {% endfor %}
-            <!-- Totais anuais gerais -->
-            {% with realizado_total=totalizadores_geral|get_item:"realizado_total"|default:0 previsto_total=totalizadores_geral|get_item:"previsto_total"|default:0 ano_anterior_total=totalizadores_geral|get_item:"ano_anterior_total"|default:0 %}
-            <td class="text-end valor-col bg-primary text-white">R$ {{ ano_anterior_total|floatformat:2 }}</td>
-            <td class="text-end valor-col bg-primary text-white {{ previsto_total|get_previsto_color:ano_anterior_total }}">R$ {{ previsto_total|floatformat:2 }}</td>
-            <td class="text-end valor-col bg-primary text-white {{ realizado_total|get_valor_color:previsto_total }}">R$ {{ realizado_total|floatformat:2 }}</td>
-            {% endwith %}
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  {% elif agrupado %}
-    <h4 class="mb-3">📊 Tabela Agrupada por Conta Contábil</h4>
-    <div class="scroll-x table-container">
-      <table class="table table-bordered table-sm table-striped">
-        <thead class="table-dark sticky-header">
-          <tr>
-            <th rowspan="2">Conta Contábil</th>
-            {% for mes_num, mes_nome in meses %}
-              <th colspan="3" class="text-center">{{ mes_nome }} / {{ request.POST.ano|default_if_none:"2025" }}</th>
-            {% endfor %}
-            <th colspan="3" class="text-center bg-primary text-white">TOTAIS ANUAIS</th>
-          </tr>
-          <tr>
-            {% for _ in meses %}
-              <th class="sub-header text-center">Ano Ant.</th>
-              <th class="sub-header text-center">Previsto</th>
-              <th class="sub-header text-center">Realizado</th>
-            {% endfor %}
-            <th class="sub-header text-center bg-primary text-white">Ano Ant.</th>
-            <th class="sub-header text-center bg-primary text-white">Previsto</th>
-            <th class="sub-header text-center bg-primary text-white">Realizado</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for conta, dados_mes in agrupado.items %}
-            <tr>
-              <td><strong>{{ conta }}</strong></td>
-              {% for mes_num, _ in meses %}
-                {% with mes_dados=dados_mes|get_item:mes_num %}
-                  {% if mes_dados %}
-                    <td class="text-end valor-col {% if forloop.counter0|divisibleby:2 %}mes-bg-1{% else %}mes-bg-2{% endif %}">R$ {{ mes_dados.ano_anterior|floatformat:2 }}</td>
-                    <td class="text-end valor-col {% if forloop.counter0|divisibleby:2 %}mes-bg-1{% else %}mes-bg-2{% endif %} {{ mes_dados.previsto|get_previsto_color:mes_dados.ano_anterior }}">R$ {{ mes_dados.previsto|floatformat:2 }}</td>
-                    <td class="text-end valor-col {% if forloop.counter0|divisibleby:2 %}mes-bg-1{% else %}mes-bg-2{% endif %} {{ mes_dados.realizado|get_valor_color:mes_dados.previsto }}">R$ {{ mes_dados.realizado|floatformat:2 }}</td>
-                  {% else %}
-                    <td class="text-end valor-col {% if forloop.counter0|divisibleby:2 %}mes-bg-1{% else %}mes-bg-2{% endif %}">R$ 0,00</td>
-                    <td class="text-end valor-col {% if forloop.counter0|divisibleby:2 %}mes-bg-1{% else %}mes-bg-2{% endif %}">R$ 0,00</td>
-                    <td class="text-end valor-col {% if forloop.counter0|divisibleby:2 %}mes-bg-1{% else %}mes-bg-2{% endif %}">R$ 0,00</td>
-                  {% endif %}
-                {% endwith %}
-              {% endfor %}
-              <!-- Totais anuais da conta -->
-              {% with realizado_total=totais_anuais_conta|get_item:conta|get_item:"realizado_total"|default:0 previsto_total=totais_anuais_conta|get_item:conta|get_item:"previsto_total"|default:0 ano_anterior_total=totais_anuais_conta|get_item:conta|get_item:"ano_anterior_total"|default:0 %}
-              <td class="text-end valor-col bg-primary text-white">R$ {{ ano_anterior_total|floatformat:2 }}</td>
-              <td class="text-end valor-col bg-primary text-white {{ previsto_total|get_previsto_color:ano_anterior_total }}">R$ {{ previsto_total|floatformat:2 }}</td>
-              <td class="text-end valor-col bg-primary text-white {{ realizado_total|get_valor_color:previsto_total }}">R$ {{ realizado_total|floatformat:2 }}</td>
-              {% endwith %}
-            </tr>
-          {% endfor %}
-          
-          <!-- Totalizadores por Centro de Resultados -->
-          {% if totalizadores_centro %}
-            <tr class="totalizador-header">
-              <td colspan="1"><strong>💰 TOTALIZADORES POR CENTRO DE RESULTADOS</strong></td>
-              {% for mes_num, _ in meses %}
-                <td colspan="3" class="text-center"><strong>{{ mes_num }}</strong></td>
-              {% endfor %}
-              <td colspan="3" class="text-center bg-primary text-white"><strong>TOTAIS ANUAIS</strong></td>
-            </tr>
-            {% for centro, totais in totalizadores_centro.items %}
-              <tr class="totalizador-row">
-                <td><strong>📊 {{ centro }}</strong></td>
-                {% for mes_num, _ in meses %}
-                  {% with chave_ano=mes_num|add:"_ano_anterior" chave_prev=mes_num|add:"_previsto" chave_real=mes_num|add:"_realizado" %}
-                    <td class="text-end valor-col">R$ {{ totais|get_item:chave_ano|default:0|floatformat:2 }}</td>
-                    <td class="text-end valor-col">R$ {{ totais|get_item:chave_prev|default:0|floatformat:2 }}</td>
-                    <td class="text-end valor-col">R$ {{ totais|get_item:chave_real|default:0|floatformat:2 }}</td>
-                  {% endwith %}
-                {% endfor %}
-                <!-- Totais anuais do centro -->
-                {% with realizado_total=totais|get_item:"realizado_total"|default:0 previsto_total=totais|get_item:"previsto_total"|default:0 %}
-                <td class="text-end valor-col bg-primary text-white">R$ {{ totais|get_item:"ano_anterior_total"|default:0|floatformat:2 }}</td>
-                <td class="text-end valor-col bg-primary text-white">R$ {{ previsto_total|floatformat:2 }}</td>
-                <td class="text-end valor-col bg-primary text-white {{ realizado_total|get_valor_color:previsto_total }}">R$ {{ realizado_total|floatformat:2 }}</td>
-                {% endwith %}
-            </tr>
-          {% endfor %}
-          {% endif %}
-        </tbody>
-      </table>
-    </div>
-  {% elif request.method == "POST" %}
-    <div class="alert alert-warning text-center mt-4">⚠️ Nenhum resultado encontrado para os filtros aplicados.</div>
-  {% endif %}
-</div>
+<script id="contas-data" type="application/json">{{ contas_json|safe }}</script>
+<script>
+  const empresaLabel = {{ empresa|default:0 }} ? document.querySelector('#empresa option:checked')?.textContent || "" : "Todas";
+  const centroLabel = document.querySelector('#centro option:checked')?.textContent || "—";
+  const ano = "{{ ano }}";
+  const accounts = JSON.parse(document.getElementById('contas-data').textContent || '[]');
 
-  <script>
-    // Autocomplete para centro de resultados
-    document.addEventListener('DOMContentLoaded', function() {
-      const centroSelect = document.getElementById('centro-select');
-      const centroSearch = document.getElementById('centro-search');
+  const months = [
+    {key:'01',label:`01 / ${ano}`,short:'Jan'},{key:'02',label:`02 / ${ano}`,short:'Fev'},
+    {key:'03',label:`03 / ${ano}`,short:'Mar'},{key:'04',label:`04 / ${ano}`,short:'Abr'},
+    {key:'05',label:`05 / ${ano}`,short:'Mai'},{key:'06',label:`06 / ${ano}`,short:'Jun'},
+    {key:'07',label:`07 / ${ano}`,short:'Jul'},{key:'08',label:`08 / ${ano}`,short:'Ago'},
+    {key:'09',label:`09 / ${ano}`,short:'Set'},{key:'10',label:`10 / ${ano}`,short:'Out'},
+    {key:'11',label:`11 / ${ano}`,short:'Nov'},{key:'12',label:`12 / ${ano}`,short:'Dez'}
+  ];
 
-      // Se o usuário não tem centros permitidos, não inicializa autocomplete
-      if (!centroSelect || centroSelect.disabled) {
-        return;
+  let collapsedMonths = new Set();
+  let selectedAccountCode = null;
+
+  function brl(v){return (v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});}
+  function percent(real,prev){if(!prev && real>0) return 999; if(!prev) return 0; return (real/prev)*100;}
+  function accountTotals(acc){
+    const previsto=acc.values.reduce((s,p)=>s+p[0],0);
+    const realizado=acc.values.reduce((s,p)=>s+p[1],0);
+    return {previsto,realizado,saldo:previsto-realizado,consumo:percent(realizado,previsto)};
+  }
+  function globalTotals(){
+    const previsto=accounts.reduce((s,a)=>s+accountTotals(a).previsto,0);
+    const realizado=accounts.reduce((s,a)=>s+accountTotals(a).realizado,0);
+    const saldo=previsto-realizado;
+    const acima=accounts.filter(a=>accountTotals(a).saldo<0).length;
+    const disponivel=accounts.filter(a=>accountTotals(a).saldo>0).length;
+    return {previsto,realizado,saldo,consumo:percent(realizado,previsto),acima,disponivel,totalContas:accounts.length};
+  }
+  function statusBadge(prev,real){
+    const saldo=prev-real, pc=percent(real,prev);
+    if(saldo<0) return '<span class="badge bad">⚠ Excedido</span>';
+    if(pc>=85) return '<span class="badge warn">⚡ Atenção</span>';
+    return '<span class="badge ok">✓ Disponível</span>';
+  }
+
+  function renderCards(){
+    if(!document.getElementById('cards')) return;
+    const t=globalTotals();
+    const cards=[
+      ['Orçamento previsto total',brl(t.previsto),'Base do período filtrado',''],
+      ['Realizado total',brl(t.realizado),'Valores consumidos no ano',''],
+      ['Saldo disponível',brl(t.saldo),'Previsto menos realizado',t.saldo<0?'danger':'success'],
+      ['Percentual consumido',`${t.consumo.toFixed(1)}%`,'Consumo geral do orçamento',t.consumo>100?'danger':t.consumo>=85?'warning':'success'],
+      ['Contas acima do orçamento',t.acima,'Exigem atenção gerencial',t.acima?'danger':'success'],
+      ['Contas com saldo disponível',t.disponivel,'Ainda possuem orçamento','success']
+    ];
+    document.getElementById('cards').innerHTML=cards.map(([l,v,h,c])=>`<article class="card ${c}"><div class="label">${l}</div><div class="value">${v}</div><div class="hint">${h}</div></article>`).join('');
+  }
+
+  function renderTableHead(){
+    document.getElementById('tableHead').innerHTML=`
+      <tr>
+        <th rowspan="2" class="account-head">Conta Contábil</th>
+        ${months.map(m=>`
+          <th colspan="4" class="month-title" data-month-title="${m.key}">
+            ${m.label}<button class="month-toggle" data-toggle-month="${m.key}" title="Recolher/expandir">−</button>
+          </th>
+          <th class="month-summary-head" data-month-summary-head="${m.key}" rowspan="2">
+            ${m.short}<br><small>Saldo</small><button class="month-toggle" data-toggle-month="${m.key}" title="Expandir">+</button>
+          </th>`).join('')}
+        <th colspan="4" class="month-title">TOTAIS ANUAIS</th>
+      </tr>
+      <tr>
+        ${months.map(m=>`
+          <th class="month-detail" data-month="${m.key}">Previsto</th>
+          <th class="month-detail" data-month="${m.key}">Realizado</th>
+          <th class="month-detail" data-month="${m.key}">Saldo</th>
+          <th class="month-detail" data-month="${m.key}">% Cons.</th>`).join('')}
+        <th>Previsto</th><th>Realizado</th><th>Saldo</th><th>Status</th>
+      </tr>`;
+  }
+
+  function renderTableBody(){
+    const tbody=document.getElementById('tableBody');
+    if(!accounts.length){ tbody.innerHTML=`<tr><td colspan="60" style="text-align:center;padding:24px;">Nenhuma conta encontrada.</td></tr>`; return; }
+    const accountRows=accounts.map(acc=>{
+      const t=accountTotals(acc);
+      const monthCells=months.map((m,idx)=>{
+        const [prev,real]=acc.values[idx];
+        const saldo=prev-real, pc=percent(real,prev);
+        const pcClass=pc>100?'high':pc>=85?'medium':'low';
+        const realClass=saldo<0?'bad':real>0?'ok':'';
+        return `
+          <td class="num month-detail prev" data-month="${m.key}">${brl(prev)}</td>
+          <td class="num month-detail real ${realClass}" data-month="${m.key}">${brl(real)}</td>
+          <td class="num month-detail saldo ${saldo<0?'negative':'positive'}" data-month="${m.key}">${brl(saldo)}</td>
+          <td class="num month-detail percent ${pcClass}" data-month="${m.key}">${pc===999?'Sem orç.':pc.toFixed(1)+'%'}</td>
+          <td class="month-summary-cell ${saldo<0?'saldo negative':'saldo positive'}" data-month-summary="${m.key}">${brl(saldo)}</td>`;
+      }).join('');
+      return `<tr data-account="${acc.code}">
+        <td class="account-cell"><span class="account-code">${acc.code}</span><span class="account-name">${acc.name||'—'}</span></td>
+        ${monthCells}
+        <td class="num prev"><strong>${brl(t.previsto)}</strong></td>
+        <td class="num real ${t.saldo<0?'bad':'ok'}"><strong>${brl(t.realizado)}</strong></td>
+        <td class="num saldo ${t.saldo<0?'negative':'positive'}"><strong>${brl(t.saldo)}</strong></td>
+        <td>${statusBadge(t.previsto,t.realizado)}</td>
+      </tr>`;
+    }).join('');
+
+    const monthlyTotals=months.map((m,idx)=>{
+      const prev=accounts.reduce((s,a)=>s+a.values[idx][0],0);
+      const real=accounts.reduce((s,a)=>s+a.values[idx][1],0);
+      const saldo=prev-real, pc=percent(real,prev);
+      return `
+        <td class="num month-detail prev" data-month="${m.key}">${brl(prev)}</td>
+        <td class="num month-detail real ${saldo<0?'bad':'ok'}" data-month="${m.key}">${brl(real)}</td>
+        <td class="num month-detail saldo ${saldo<0?'negative':'positive'}" data-month="${m.key}">${brl(saldo)}</td>
+        <td class="num month-detail percent ${pc>100?'high':pc>=85?'medium':'low'}" data-month="${m.key}">${pc===999?'Sem orç.':pc.toFixed(1)+'%'}</td>
+        <td class="month-summary-cell ${saldo<0?'saldo negative':'saldo positive'}" data-month-summary="${m.key}">${brl(saldo)}</td>`;
+    }).join('');
+    const gt=globalTotals();
+    tbody.innerHTML=accountRows+`<tr class="total-row">
+      <td class="account-cell"><span class="account-code">TOTAL</span><span class="account-name">${centroLabel}</span></td>
+      ${monthlyTotals}
+      <td class="num prev">${brl(gt.previsto)}</td>
+      <td class="num real ${gt.saldo<0?'bad':'ok'}">${brl(gt.realizado)}</td>
+      <td class="num saldo ${gt.saldo<0?'negative':'positive'}">${brl(gt.saldo)}</td>
+      <td>${statusBadge(gt.previsto,gt.realizado)}</td>
+    </tr>`;
+  }
+
+  function applyCollapsedMonths(){
+    document.querySelectorAll('[data-month],[data-month-title],[data-month-summary],[data-month-summary-head]').forEach(el=>{
+      const key=el.dataset.month||el.dataset.monthTitle||el.dataset.monthSummary||el.dataset.monthSummaryHead;
+      if(collapsedMonths.has(key)){
+        if(el.dataset.month) el.style.display='none';
+        if(el.dataset.monthTitle) el.style.display='none';
+        if(el.dataset.monthSummary||el.dataset.monthSummaryHead) el.style.display='table-cell';
+      } else {
+        if(el.dataset.month) el.style.display='table-cell';
+        if(el.dataset.monthTitle) el.style.display='table-cell';
+        if(el.dataset.monthSummary||el.dataset.monthSummaryHead) el.style.display='none';
       }
-      
-      // Criar container para autocomplete
-      const container = centroSearch.parentElement;
-      container.classList.add('autocomplete-container');
-      
-      // Criar div para resultados do autocomplete
-      const autocompleteResults = document.createElement('div');
-      autocompleteResults.className = 'autocomplete-results';
-      container.appendChild(autocompleteResults);
-      
-      // Definir valor inicial do campo de pesquisa
-      if (centroSelect.value) {
-        const selectedOption = centroSelect.options[centroSelect.selectedIndex];
-        if (selectedOption && selectedOption.text) {
-          centroSearch.value = selectedOption.text;
-        }
-      }
-      
-      // Função para filtrar opções
-      function filterOptions(searchTerm) {
-        const options = Array.from(centroSelect.options);
-        const filtered = options.filter(option => 
-          option.text.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          option.value.toLowerCase().includes(searchTerm.toLowerCase())
-        );
-        
-        return filtered;
-      }
-      
-      // Função para mostrar resultados
-      function showResults(results) {
-        autocompleteResults.innerHTML = '';
-        
-        if (results.length === 0) {
-          autocompleteResults.style.display = 'none';
-          return;
-        }
-        
-        results.forEach((option, index) => {
-          const item = document.createElement('div');
-          item.className = 'autocomplete-item';
-          item.textContent = option.text;
-          item.dataset.value = option.value;
-          
-          item.addEventListener('click', function() {
-            centroSelect.value = this.dataset.value;
-            centroSearch.value = this.textContent;
-            autocompleteResults.style.display = 'none';
-          });
-          
-          autocompleteResults.appendChild(item);
-        });
-        
-        autocompleteResults.style.display = 'block';
-      }
-      
-      // Event listener para digitação
-      centroSearch.addEventListener('input', function() {
-        const searchTerm = this.value;
-        const results = filterOptions(searchTerm);
-        showResults(results);
-      });
-      
-      // Event listener para foco
-      centroSearch.addEventListener('focus', function() {
-        const searchTerm = this.value;
-        const results = filterOptions(searchTerm);
-        showResults(results);
-      });
-      
-      // Event listener para teclas especiais
-      centroSearch.addEventListener('keydown', function(e) {
-        const items = autocompleteResults.querySelectorAll('.autocomplete-item');
-        const selected = autocompleteResults.querySelector('.autocomplete-item.selected');
-        
-        if (e.key === 'ArrowDown') {
-          e.preventDefault();
-          if (selected) {
-            selected.classList.remove('selected');
-            const next = selected.nextElementSibling;
-            if (next) next.classList.add('selected');
-            else if (items.length > 0) items[0].classList.add('selected');
-          } else if (items.length > 0) {
-            items[0].classList.add('selected');
-          }
-        } else if (e.key === 'ArrowUp') {
-          e.preventDefault();
-          if (selected) {
-            selected.classList.remove('selected');
-            const prev = selected.previousElementSibling;
-            if (prev) prev.classList.add('selected');
-            else if (items.length > 0) items[items.length - 1].classList.add('selected');
-          } else if (items.length > 0) {
-            items[items.length - 1].classList.add('selected');
-          }
-        } else if (e.key === 'Enter') {
-          e.preventDefault();
-          if (selected) {
-            selected.click();
-          }
-        } else if (e.key === 'Escape') {
-          autocompleteResults.style.display = 'none';
-        }
-      });
-      
-      // Esconder resultados quando clicar fora
-      document.addEventListener('click', function(e) {
-        if (!container.contains(e.target)) {
-          autocompleteResults.style.display = 'none';
-        }
+    });
+    document.querySelectorAll('[data-toggle-month]').forEach(btn=>{
+      btn.textContent=collapsedMonths.has(btn.dataset.toggleMonth)?'+':'−';
+    });
+  }
+
+  function bindTableEvents(){
+    document.querySelectorAll('[data-toggle-month]').forEach(btn=>{
+      btn.addEventListener('click',e=>{e.stopPropagation();const k=btn.dataset.toggleMonth;collapsedMonths.has(k)?collapsedMonths.delete(k):collapsedMonths.add(k);applyCollapsedMonths();});
+    });
+    document.querySelectorAll('tbody tr[data-account]').forEach(row=>{
+      row.addEventListener('click',()=>{
+        const code=row.dataset.account;
+        selectedAccountCode = selectedAccountCode===code ? null : code;
+        document.querySelectorAll('tbody tr[data-account]').forEach(r=>r.classList.toggle('selected',r.dataset.account===selectedAccountCode));
+        updatePanel();
       });
     });
-  </script>
-  
-  <script>
-    // Script para exportar Excel com os parâmetros do formulário
-    document.getElementById('btn-exportar-excel')?.addEventListener('click', function() {
-      const form = document.querySelector('form');
-      if (!form) return;
-      
-      const ano = form.querySelector('[name="ano"]')?.value || '{{ ano_atual }}';
-      const empresa = form.querySelector('[name="empresa"]')?.value || '';
-      const centro = form.querySelector('[name="centro"]')?.value || '';
-      
-      // Construir URL com parâmetros
-      let url = '{% url "exportar_excel" %}?ano=' + encodeURIComponent(ano);
-      if (empresa) {
-        url += '&empresa=' + encodeURIComponent(empresa);
-      }
-      if (centro) {
-        url += '&centro=' + encodeURIComponent(centro);
-      }
-      
-      // Abrir em nova aba para download
-      window.location.href = url;
-    });
-  </script>
+  }
+
+  function renderMiniChart(values){
+    const max=Math.max(...values.flat(),1);
+    return values.map(([prev,real])=>{
+      const pH=Math.max(4,(prev/max)*80), rH=Math.max(4,(real/max)*80);
+      return `<div class="bar-pair"><div class="bar prev-bar" style="height:${pH}%"></div><div class="bar real-bar ${real>prev?'over':''}" style="height:${rH}%"></div></div>`;
+    }).join('');
+  }
+
+  function metric(l,v){return `<div class="panel-metric"><span>${l}</span><strong>${v}</strong></div>`;}
+
+  function updatePanel(){
+    if(!document.getElementById('panelMetrics')) return;
+    if(!selectedAccountCode){
+      const t=globalTotals();
+      document.getElementById('panelEyebrow').textContent='Análise do Centro de Resultado';
+      document.getElementById('panelTitle').textContent=centroLabel;
+      document.getElementById('panelMetrics').innerHTML=[
+        metric('Ano',ano),metric('Empresa',empresaLabel.split(' - ')[0]),
+        metric('Previsto total',brl(t.previsto)),metric('Realizado total',brl(t.realizado)),
+        metric('Saldo total',brl(t.saldo)),metric('% consumido',`${t.consumo.toFixed(1)}%`),
+        metric('Contas analisadas',t.totalContas),metric('Acima do orçamento',t.acima)
+      ].join('');
+      document.getElementById('progressLabel').textContent='Consumo geral do centro';
+      document.getElementById('progressBar').style.width=Math.min(t.consumo,100)+'%';
+      const monthly=months.map((m,idx)=>[
+        accounts.reduce((s,a)=>s+a.values[idx][0],0),
+        accounts.reduce((s,a)=>s+a.values[idx][1],0)
+      ]);
+      document.getElementById('miniChart').innerHTML=renderMiniChart(monthly);
+      document.getElementById('panelNotes').innerHTML=`
+        <li>O painel mostra a análise geral do centro pesquisado.</li>
+        <li><b>${t.acima}</b> conta(s) estão acima do orçamento.</li>
+        <li>Clique numa conta para analisá-la. Clique de novo para voltar.</li>`;
+    } else {
+      const acc=accounts.find(a=>a.code===selectedAccountCode); if(!acc) return;
+      const t=accountTotals(acc);
+      const overMonths=acc.values.map((p,i)=>p[1]>p[0]?months[i].short:null).filter(Boolean);
+      const biggest=acc.values.map((p,i)=>({month:months[i].short,real:p[1]})).sort((a,b)=>b.real-a.real).slice(0,3).map(x=>`${x.month}: ${brl(x.real)}`).join(' | ');
+      document.getElementById('panelEyebrow').textContent='Análise da Conta Contábil';
+      document.getElementById('panelTitle').textContent=`${acc.code} — ${acc.name||'—'}`;
+      document.getElementById('panelMetrics').innerHTML=[
+        metric('Centro',centroLabel.split(' - ')[0]),metric('Empresa',empresaLabel.split(' - ')[0]),
+        metric('Previsto anual',brl(t.previsto)),metric('Realizado anual',brl(t.realizado)),
+        metric('Saldo anual',brl(t.saldo)),metric('% consumido',`${t.consumo.toFixed(1)}%`),
+        metric('Meses com estouro',overMonths.length||0),metric('Status',t.saldo<0?'Excedido':'Disponível')
+      ].join('');
+      document.getElementById('progressLabel').textContent='Consumo anual da conta';
+      document.getElementById('progressBar').style.width=Math.min(t.consumo,100)+'%';
+      document.getElementById('miniChart').innerHTML=renderMiniChart(acc.values);
+      document.getElementById('panelNotes').innerHTML=`
+        <li><b>Meses com maior consumo:</b> ${biggest||'—'}</li>
+        <li><b>Meses com estouro:</b> ${overMonths.length?overMonths.join(', '):'Nenhum'}</li>
+        <li>Clique novamente para desselecionar.</li>`;
+    }
+  }
+
+  // Inicializar
+  if(accounts.length){
+    renderCards();
+    renderTableHead();
+    renderTableBody();
+    bindTableEvents();
+    applyCollapsedMonths();
+    updatePanel();
+    document.getElementById('collapseAll')?.addEventListener('click',()=>{collapsedMonths=new Set(months.map(m=>m.key));applyCollapsedMonths();});
+    document.getElementById('expandAll')?.addEventListener('click',()=>{collapsedMonths.clear();applyCollapsedMonths();});
+  }
+
+  // Exportar Excel: aproveita endpoint existente
+  document.getElementById('btnExportar')?.addEventListener('click',()=>{
+    const ano=document.getElementById('ano').value;
+    const empresa=document.getElementById('empresa').value;
+    const centro=document.getElementById('centro').value;
+    const qs=new URLSearchParams({ano,empresa,centro}).toString();
+    window.location.href=`{% url 'exportar_excel' %}?${qs}`;
+  });
 
   {% if pode_aprovar_liberacao %}
-  <script>
-    // Polling do badge de liberações pendentes (60s)
-    async function atualizarBadgePendentes() {
-      try {
-        const r = await fetch("{% url 'liberacao_count' %}", { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
-        const data = await r.json();
-        const badge = document.getElementById('badge-pendentes');
-        if (!badge) return;
-        if (data.count && data.count > 0) {
-          badge.textContent = data.count;
-          badge.style.display = 'inline-block';
-        } else {
-          badge.style.display = 'none';
-        }
-      } catch (e) {
-        console.warn('Erro ao buscar contador de liberações:', e);
-      }
-    }
-    atualizarBadgePendentes();
-    setInterval(atualizarBadgePendentes, 60000);
-  </script>
+  // Badge pendentes
+  async function atualizarBadge(){
+    try {
+      const r=await fetch("{% url 'liberacao_count' %}",{headers:{'X-Requested-With':'XMLHttpRequest'}});
+      const d=await r.json();
+      const b=document.getElementById('badge-pendentes');
+      if(!b) return;
+      if(d.count>0){b.textContent=d.count;b.style.display='inline-block';}
+      else b.style.display='none';
+    } catch(e){console.warn(e);}
+  }
+  atualizarBadge();
+  setInterval(atualizarBadge,60000);
   {% endif %}
+</script>
 </body>
 </html>

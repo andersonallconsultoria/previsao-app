@@ -499,8 +499,10 @@ def painel_view(request):
     # Verificar permissões do usuário
     pode_gerenciar_usuarios = usuario_pode_gerenciar_usuarios(username)
     tem_acesso_configuracao = usuario_tem_acesso_configuracao(username)
-    
+    pode_aprovar_liberacao_flag = usuario_pode_aprovar_liberacao(username)
+
     return render(request, 'painel.html', {
+        'pode_aprovar_liberacao': pode_aprovar_liberacao_flag,
         'empresas': empresas,
         'centros': centros,
         'resultados': resultados,
@@ -2733,3 +2735,120 @@ def dre_view(request):
         'consultou': True,
     }
     return render(request, 'dre.html', context)
+
+
+# ==================== LIBERAÇÃO DE EXCEDENTE ====================
+
+@token_required
+def liberacoes_aprovar_view(request):
+    """Tela 'Aprovar Liberações' (só para usuarios_aprovador_liberacao)."""
+    from .decorators import aprovador_required as _ar  # noqa
+    from . import liberacoes_service
+
+    username = request.session.get('username', '')
+    if not usuario_pode_aprovar_liberacao(username):
+        return redirect('painel')
+
+    pendentes = liberacoes_service.listar_pendentes()
+    return render(request, 'liberacoes_aprovar.html', {
+        'pendentes': pendentes,
+        'total': len(pendentes),
+        'username': username,
+        'pode_gerenciar_usuarios': usuario_pode_gerenciar_usuarios(username),
+        'tem_acesso_configuracao': usuario_tem_acesso_configuracao(username),
+    })
+
+
+@token_required
+def liberacoes_minhas_view(request):
+    """Tela 'Minhas Solicitações' (acesso por qualquer usuário logado)."""
+    from . import liberacoes_service
+
+    username = request.session.get('username', '')
+    minhas = liberacoes_service.listar_minhas(username)
+    return render(request, 'liberacoes_minhas.html', {
+        'minhas': minhas,
+        'total': len(minhas),
+        'username': username,
+        'pode_gerenciar_usuarios': usuario_pode_gerenciar_usuarios(username),
+        'tem_acesso_configuracao': usuario_tem_acesso_configuracao(username),
+        'pode_aprovar_liberacao': usuario_pode_aprovar_liberacao(username),
+    })
+
+
+@token_required
+def liberacao_decidir_ajax(request):
+    """Endpoint AJAX para aprovar/recusar uma solicitação."""
+    from . import liberacoes_service
+
+    username = request.session.get('username', '')
+    if not usuario_pode_aprovar_liberacao(username):
+        return JsonResponse({'success': False, 'message': 'Acesso negado'}, status=403)
+
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'message': 'Método não permitido'}, status=405)
+
+    try:
+        idsolicitacao = int(request.POST.get('idsolicitacao') or 0)
+        decisao = (request.POST.get('decisao') or '').upper()  # A ou R
+        observacao = (request.POST.get('observacao') or '').strip()
+        tipo = (request.POST.get('tipo') or '').upper() or None  # U, V, P (apenas em A)
+        valor_extra_str = (request.POST.get('valor_extra') or '').strip().replace('.', '').replace(',', '.')
+        perc_extra_str = (request.POST.get('perc_extra') or '').strip().replace(',', '.')
+
+        if idsolicitacao <= 0:
+            return JsonResponse({'success': False, 'message': 'ID inválido'}, status=400)
+        if decisao not in ('A', 'R'):
+            return JsonResponse({'success': False, 'message': 'Decisão deve ser A ou R'}, status=400)
+        if not observacao:
+            return JsonResponse({'success': False, 'message': 'Observação é obrigatória'}, status=400)
+
+        valor_extra = float(valor_extra_str) if valor_extra_str else None
+        perc_extra = float(perc_extra_str) if perc_extra_str else None
+
+        # Em recusa, ignora tipo/valor/perc
+        if decisao == 'R':
+            tipo, valor_extra, perc_extra = None, None, None
+        else:
+            # Em aprovação, default = U
+            if not tipo:
+                tipo = 'U'
+            if tipo == 'U':
+                valor_extra, perc_extra = None, None
+            elif tipo == 'V':
+                perc_extra = None
+                if valor_extra is None or valor_extra <= 0:
+                    return JsonResponse({'success': False, 'message': 'Valor extra é obrigatório no tipo V'}, status=400)
+            elif tipo == 'P':
+                valor_extra = None
+                if perc_extra is None or perc_extra <= 0:
+                    return JsonResponse({'success': False, 'message': 'Percentual é obrigatório no tipo P'}, status=400)
+            else:
+                return JsonResponse({'success': False, 'message': f'Tipo inválido: {tipo}'}, status=400)
+
+        result = liberacoes_service.decidir(
+            idsolicitacao=idsolicitacao,
+            decisao=decisao,
+            tipo_liberacao=tipo,
+            valor_extra=valor_extra,
+            perc_extra=perc_extra,
+            usuario_aprovador=username,
+            observacao=observacao,
+        )
+        status = 200 if result['success'] else 400
+        return JsonResponse(result, status=status)
+    except ValueError as e:
+        return JsonResponse({'success': False, 'message': f'Dados inválidos: {e}'}, status=400)
+    except Exception as e:
+        logger.exception("❌ Erro ao decidir liberação")
+        return JsonResponse({'success': False, 'message': f'Erro interno: {e}'}, status=500)
+
+
+@token_required
+def liberacao_count_ajax(request):
+    """Endpoint AJAX para o badge de contagem de pendentes."""
+    from . import liberacoes_service
+    username = request.session.get('username', '')
+    if not usuario_pode_aprovar_liberacao(username):
+        return JsonResponse({'count': 0})
+    return JsonResponse({'count': liberacoes_service.count_pendentes()})

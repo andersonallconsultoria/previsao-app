@@ -1,0 +1,104 @@
+"""
+Camada de acesso aos endpoints CISS-Poder relacionados a liberação de excedente.
+
+Endpoints expostos no CISS-Poder:
+  - /liberacao_listar_pendentes  (SELECT)   -> tela "Aprovar Liberações"
+  - /liberacao_listar_minhas     (SELECT)   -> tela "Minhas Solicitações"
+  - /liberacao_count_pendentes   (SELECT)   -> badge no menu
+  - /liberacao_decidir           (FUNCTION) -> aprovar/recusar
+
+Todas as chamadas usam o service account (get_api_headers()) — controle de
+permissão acontece no Django via usuarios_config.json.
+"""
+
+import requests
+import logging
+
+from . import views as _v  # reaproveita get_dynamic_config, get_api_headers
+
+logger = logging.getLogger(__name__)
+
+
+def _post_endpoint(endpoint, payload, timeout=30):
+    """Wrapper centralizado pra POSTs aos endpoints CISS-Poder."""
+    url = f"{_v.get_dynamic_config('API_BASE_URL')}/cisspoder-service/{endpoint}"
+    try:
+        resp = requests.post(url, json=payload, headers=_v.get_api_headers(), timeout=timeout)
+        if resp.status_code == 200:
+            return resp.json()
+        logger.warning(f"⚠️ {endpoint} retornou {resp.status_code}: {resp.text[:200]}")
+        return {"data": [], "error": f"HTTP {resp.status_code}"}
+    except Exception as e:
+        logger.exception(f"❌ Erro ao chamar {endpoint}")
+        return {"data": [], "error": str(e)}
+
+
+def listar_pendentes(page=1, limit=100):
+    """Lista todas as solicitações pendentes (para o aprovador)."""
+    payload = {"page": page, "limit": limit, "clausulas": []}
+    resp = _post_endpoint("liberacao_listar_pendentes", payload)
+    return resp.get("data", [])
+
+
+def listar_minhas(userso, page=1, limit=100):
+    """Lista as solicitações do usuário logado (qualquer status)."""
+    payload = {
+        "page": page,
+        "limit": limit,
+        "clausulas": [
+            {"campo": "userso", "operadorlogico": "AND", "operador": "IGUAL", "valor": userso},
+        ],
+    }
+    resp = _post_endpoint("liberacao_listar_minhas", payload)
+    return resp.get("data", [])
+
+
+def count_pendentes():
+    """Retorna a contagem de solicitações pendentes (para o badge)."""
+    resp = _post_endpoint("liberacao_count_pendentes", {"page": 1, "limit": 1, "clausulas": []}, timeout=10)
+    data = resp.get("data", [])
+    if data and isinstance(data, list) and len(data) > 0:
+        # A API pode retornar com key TOTAL_PENDENTES ou totalPendentes (camelCase)
+        first = data[0]
+        return int(first.get("TOTAL_PENDENTES") or first.get("totalPendentes") or 0)
+    return 0
+
+
+def decidir(idsolicitacao, decisao, tipo_liberacao, valor_extra, perc_extra,
+            usuario_aprovador, observacao):
+    """Aprova ou recusa uma solicitação.
+
+    Args:
+        idsolicitacao: int — ID da solicitação
+        decisao: 'A' (aprovar) ou 'R' (recusar)
+        tipo_liberacao: 'U', 'V' ou 'P' (só usado se decisao='A'; senão None)
+        valor_extra: decimal — só usado se tipo='V'; senão None
+        perc_extra: decimal — só usado se tipo='P'; senão None
+        usuario_aprovador: username (string)
+        observacao: texto (obrigatório, validado também no banco)
+
+    Returns:
+        dict com 'success' (bool) e 'message' (str).
+    """
+    payload = {
+        "page": 1, "limit": 1,
+        "clausulas": [
+            {"campo": "p_idsolicitacao",     "operadorlogico": "AND", "operador": "IGUAL", "valor": int(idsolicitacao)},
+            {"campo": "p_decisao",           "operadorlogico": "AND", "operador": "IGUAL", "valor": decisao},
+            {"campo": "p_tipo",              "operadorlogico": "AND", "operador": "IGUAL", "valor": tipo_liberacao},
+            {"campo": "p_valor_extra",       "operadorlogico": "AND", "operador": "IGUAL", "valor": valor_extra},
+            {"campo": "p_perc_extra",        "operadorlogico": "AND", "operador": "IGUAL", "valor": perc_extra},
+            {"campo": "p_usuario_aprovador", "operadorlogico": "AND", "operador": "IGUAL", "valor": usuario_aprovador},
+            {"campo": "p_observacao",        "operadorlogico": "AND", "operador": "IGUAL", "valor": observacao},
+        ],
+    }
+    resp = _post_endpoint("liberacao_decidir", payload, timeout=30)
+    data = resp.get("data", [])
+    if not data:
+        return {"success": False, "message": resp.get("error") or "Resposta vazia do servidor"}
+
+    first = data[0]
+    # API costuma camelCase: FG_STATUS -> fgStatus, DS_MENSAGEM -> dsMensagem
+    status = (first.get("FG_STATUS") or first.get("fgStatus") or "N").upper()
+    mensagem = first.get("DS_MENSAGEM") or first.get("dsMensagem") or "Sem mensagem"
+    return {"success": status == "S", "message": mensagem}

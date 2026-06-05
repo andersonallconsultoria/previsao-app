@@ -84,9 +84,9 @@
           <tbody>
             {% for s in minhas %}
             <tr>
-              <td>{{ s.IDSOLICITACAO|default:s.idSolicitacao }}</td>
+              <td>{{ s.idsolicitacao }}</td>
               <td>
-                {% with st=s.FLAG_STATUS|default:s.flagStatus %}
+                {% with st=s.flagStatus %}
                 <span class="status {{ st }}">
                   {% if st == 'P' %}⏳ Pendente
                   {% elif st == 'A' %}✓ Aprovada
@@ -97,24 +97,24 @@
                 {% endwith %}
               </td>
               <td>
-                Emp: <b>{{ s.IDEMPRESA|default:s.idEmpresa }}</b><br>
-                CR: <b>{{ s.IDCENTRORESULTADO|default:s.idCentroresultado }}</b><br>
-                Cta: <b>{{ s.IDCTACONTABIL|default:s.idCtacontabil }}</b>
+                Emp: <b>{{ s.idempresa }}</b><br>
+                CR: <b>{{ s.idcentroresultado }}</b><br>
+                Cta: <b>{{ s.idctacontabil }}</b>
               </td>
-              <td>{{ s.DTMOVIMENTO|default:s.dtMovimento|default:"-" }}</td>
-              <td class="num">{{ s.VALOR_PREVISTO|default:s.valorPrevisto|floatformat:2 }}</td>
-              <td class="num">{{ s.VALOR_REALIZADO|default:s.valorRealizado|floatformat:2 }}</td>
-              <td class="num">{{ s.VALLANCAMENTO|default:s.valLancamento|floatformat:2 }}</td>
-              <td>{{ s.NUM_TENTATIVAS|default:s.numTentativas|default:1 }}</td>
-              <td><span class="pill-origem">{{ s.ORIGEM|default:s.origem|default:"-" }}</span></td>
+              <td>{{ s.dtmovimento|default:"-" }}</td>
+              <td class="num">{{ s.valorPrevisto|floatformat:2 }}</td>
+              <td class="num">{{ s.valorRealizado|floatformat:2 }}</td>
+              <td class="num">{{ s.vallancamento|floatformat:2 }}</td>
+              <td>{{ s.numTentativas|default:1 }}</td>
+              <td><span class="pill-origem">{{ s.origem|default:"-" }}</span></td>
               <td>
-                {% if s.USUARIO_APROVADOR|default:s.usuarioAprovador %}
+                {% if s.usuarioAprovador %}
                   <details>
-                    <summary>Por {{ s.USUARIO_APROVADOR|default:s.usuarioAprovador }}</summary>
+                    <summary>Por {{ s.usuarioAprovador }}</summary>
                     <div class="meta">
-                      <div><b>Quando:</b> {{ s.DT_DECISAO|default:s.dtDecisao|default:"-" }}</div>
-                      <div><b>Tipo:</b> {{ s.TIPO_LIBERACAO|default:s.tipoLiberacao|default:"-" }}</div>
-                      <div><b>Observação:</b> {{ s.OBSERVACAO|default:s.observacao|default:"(vazia)" }}</div>
+                      <div><b>Quando:</b> {{ s.dtDecisao|default:"-" }}</div>
+                      <div><b>Tipo:</b> {{ s.tipoLiberacao|default:"-" }}</div>
+                      <div><b>Observação:</b> {{ s.observacao|default:"(vazia)" }}</div>
                     </div>
                   </details>
                 {% else %}

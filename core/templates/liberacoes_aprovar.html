@@ -100,24 +100,24 @@
           </thead>
           <tbody>
             {% for s in pendentes %}
-            <tr data-id="{{ s.IDSOLICITACAO|default:s.idSolicitacao }}">
-              <td>{{ s.IDSOLICITACAO|default:s.idSolicitacao }}</td>
-              <td><b>{{ s.USERSO_SOL|default:s.usersoSol|default:"-" }}</b></td>
+            <tr data-id="{{ s.idsolicitacao }}">
+              <td>{{ s.idsolicitacao }}</td>
+              <td><b>{{ s.usersoSol|default:s.idusuarioSol|default:"-" }}</b></td>
               <td>
-                Emp: <b>{{ s.IDEMPRESA|default:s.idEmpresa }}</b><br>
-                CR: <b>{{ s.IDCENTRORESULTADO|default:s.idCentroresultado }}</b><br>
-                Cta: <b>{{ s.IDCTACONTABIL|default:s.idCtacontabil }}</b>
+                Emp: <b>{{ s.idempresa }}</b><br>
+                CR: <b>{{ s.idcentroresultado }}</b><br>
+                Cta: <b>{{ s.idctacontabil }}</b>
               </td>
-              <td>{{ s.DTMOVIMENTO|default:s.dtMovimento|default:"-" }}</td>
-              <td class="num">{{ s.VALOR_PREVISTO|default:s.valorPrevisto|floatformat:2 }}</td>
-              <td class="num">{{ s.VALOR_REALIZADO|default:s.valorRealizado|floatformat:2 }}</td>
-              <td class="num"><b style="color:#dc2626;">{{ s.VALOR_EXCEDENTE|default:s.valorExcedente|floatformat:2 }}</b></td>
-              <td class="num">{{ s.VALLANCAMENTO|default:s.valLancamento|floatformat:2 }}</td>
-              <td><span class="pill-tentativas">🔄 {{ s.NUM_TENTATIVAS|default:s.numTentativas|default:1 }}</span></td>
-              <td><span class="pill-origem">{{ s.ORIGEM|default:s.origem|default:"-" }}</span></td>
+              <td>{{ s.dtmovimento|default:"-" }}</td>
+              <td class="num">{{ s.valorPrevisto|floatformat:2 }}</td>
+              <td class="num">{{ s.valorRealizado|floatformat:2 }}</td>
+              <td class="num"><b style="color:#dc2626;">{{ s.valorExcedente|floatformat:2 }}</b></td>
+              <td class="num">{{ s.vallancamento|floatformat:2 }}</td>
+              <td><span class="pill-tentativas">🔄 {{ s.numTentativas|default:1 }}</span></td>
+              <td><span class="pill-origem">{{ s.origem|default:"-" }}</span></td>
               <td>
-                <button class="btn-aprovar" onclick='abrirModal({{ s.IDSOLICITACAO|default:s.idSolicitacao }}, "A", {{ s.VALOR_PREVISTO|default:s.valorPrevisto|default:0 }}, {{ s.VALOR_REALIZADO|default:s.valorRealizado|default:0 }}, {{ s.VALLANCAMENTO|default:s.valLancamento|default:0 }})'>✓ Aprovar</button>
-                <button class="btn-recusar" onclick='abrirModal({{ s.IDSOLICITACAO|default:s.idSolicitacao }}, "R", 0, 0, 0)'>✗ Recusar</button>
+                <button class="btn-aprovar" onclick='abrirModal({{ s.idsolicitacao }}, "A", {{ s.valorPrevisto|default:0 }}, {{ s.valorRealizado|default:0 }}, {{ s.vallancamento|default:0 }})'>✓ Aprovar</button>
+                <button class="btn-recusar" onclick='abrirModal({{ s.idsolicitacao }}, "R", 0, 0, 0)'>✗ Recusar</button>
               </td>
             </tr>
             {% endfor %}

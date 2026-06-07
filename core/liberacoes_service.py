@@ -20,7 +20,11 @@ logger = logging.getLogger(__name__)
 
 
 def _post_endpoint(endpoint, payload, timeout=30):
-    """Wrapper centralizado pra POSTs aos endpoints CISS-Poder."""
+    """Wrapper centralizado pra POSTs aos endpoints CISS-Poder.
+
+    Para endpoints SELECT, payload é dict com page/limit/clausulas.
+    Para endpoints FUNCTION/PROCEDURE, payload é list de dict com chaves UPPERCASE.
+    """
     url = f"{_v.get_dynamic_config('API_BASE_URL')}/cisspoder-service/{endpoint}"
     try:
         resp = requests.post(url, json=payload, headers=_v.get_api_headers(), timeout=timeout)
@@ -80,18 +84,17 @@ def decidir(idsolicitacao, decisao, tipo_liberacao, valor_extra, perc_extra,
     Returns:
         dict com 'success' (bool) e 'message' (str).
     """
-    payload = {
-        "page": 1, "limit": 1,
-        "clausulas": [
-            {"campo": "p_idsolicitacao",     "operadorlogico": "AND", "operador": "IGUAL", "valor": int(idsolicitacao)},
-            {"campo": "p_decisao",           "operadorlogico": "AND", "operador": "IGUAL", "valor": decisao},
-            {"campo": "p_tipo",              "operadorlogico": "AND", "operador": "IGUAL", "valor": tipo_liberacao},
-            {"campo": "p_valor_extra",       "operadorlogico": "AND", "operador": "IGUAL", "valor": valor_extra},
-            {"campo": "p_perc_extra",        "operadorlogico": "AND", "operador": "IGUAL", "valor": perc_extra},
-            {"campo": "p_usuario_aprovador", "operadorlogico": "AND", "operador": "IGUAL", "valor": usuario_aprovador},
-            {"campo": "p_observacao",        "operadorlogico": "AND", "operador": "IGUAL", "valor": observacao},
-        ],
-    }
+    # Endpoints FUNCTION/PROCEDURE no CISS-Poder esperam array de objetos com
+    # chaves em UPPERCASE (mesmo padrao do /set_centroresultado_config).
+    payload = [{
+        "P_IDSOLICITACAO":     int(idsolicitacao),
+        "P_DECISAO":           decisao,
+        "P_TIPO":              tipo_liberacao,
+        "P_VALOR_EXTRA":       valor_extra,
+        "P_PERC_EXTRA":        perc_extra,
+        "P_USUARIO_APROVADOR": usuario_aprovador,
+        "P_OBSERVACAO":        observacao,
+    }]
     resp = _post_endpoint("liberacao_decidir", payload, timeout=30)
     data = resp.get("data", [])
     if not data:

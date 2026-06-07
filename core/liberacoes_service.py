@@ -97,8 +97,13 @@ def decidir(idsolicitacao, decisao, tipo_liberacao, valor_extra, perc_extra,
     if not data:
         return {"success": False, "message": resp.get("error") or "Resposta vazia do servidor"}
 
+    # A function retorna uma única coluna MENSAGEM com prefixo OK: ou ERRO:
     first = data[0]
-    # API costuma camelCase: FG_STATUS -> fgStatus, DS_MENSAGEM -> dsMensagem
-    status = (first.get("FG_STATUS") or first.get("fgStatus") or "N").upper()
-    mensagem = first.get("DS_MENSAGEM") or first.get("dsMensagem") or "Sem mensagem"
-    return {"success": status == "S", "message": mensagem}
+    mensagem = (first.get("MENSAGEM") or first.get("mensagem") or "").strip()
+    if not mensagem:
+        return {"success": False, "message": "Sem mensagem na resposta"}
+    upper = mensagem.upper()
+    success = upper.startswith("OK")
+    # Remove o prefixo "OK:" ou "ERRO:" para mostrar apenas a mensagem na UI
+    msg_limpa = mensagem.split(":", 1)[1].strip() if ":" in mensagem else mensagem
+    return {"success": success, "message": msg_limpa}

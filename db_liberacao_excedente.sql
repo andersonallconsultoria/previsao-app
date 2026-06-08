@@ -99,6 +99,7 @@ BEGIN ATOMIC
     DECLARE V_DTMOVIMENTO     DATE         DEFAULT NULL;
     DECLARE V_IDPLANILHA      INT          DEFAULT NULL;
     DECLARE V_ORIGEM          CHAR(4)      DEFAULT NULL;
+    DECLARE V_NOMEUSUARIO     VARCHAR(128) DEFAULT NULL;
 
     DECLARE V_POS_CR          INT DEFAULT 0;
     DECLARE V_POS_EMP         INT DEFAULT 0;
@@ -171,17 +172,26 @@ BEGIN ATOMIC
                     END IF;
                 END IF;
 
+                -- Resolve o NOMEUSUARIO real (login do sistema), não o USERSO da máquina
+                IF NEW_ROW.IDUSUARIO IS NOT NULL THEN
+                    SET V_NOMEUSUARIO = (
+                        SELECT NOMEUSUARIO FROM DBA.USUARIO
+                         WHERE IDUSUARIO = NEW_ROW.IDUSUARIO
+                         FETCH FIRST 1 ROW ONLY
+                    );
+                END IF;
+
                 -- INSERT na fila
                 INSERT INTO INTEGRIM.SOLICITACAO_LIBERACAO (
                     IDERRO_ORIGEM, IDEMPRESA, IDCENTRORESULTADO, IDCTACONTABIL,
                     DTMOVIMENTO, VALLANCAMENTO, IDPLANILHA, ORIGEM,
                     VALOR_PREVISTO, VALOR_REALIZADO, VALOR_EXCEDENTE,
-                    IDUSUARIO_SOL, HOSTNAME_SOL
+                    IDUSUARIO_SOL, USERSO_SOL, HOSTNAME_SOL
                 ) VALUES (
                     NEW_ROW.IDERRO, V_IDEMPRESA, V_IDCR, V_IDCTA,
                     V_DTMOVIMENTO, V_VALOR_LCTO, V_IDPLANILHA, V_ORIGEM,
                     V_LIMITE, V_REALIZ, V_REALIZ - V_LIMITE,
-                    NEW_ROW.IDUSUARIO, NEW_ROW.HOSTNAME
+                    NEW_ROW.IDUSUARIO, V_NOMEUSUARIO, NEW_ROW.HOSTNAME
                 );
             END IF;
         END IF;

@@ -2767,18 +2767,24 @@ def dre_view(request):
 
 @token_required
 def liberacoes_aprovar_view(request):
-    """Tela 'Aprovar Liberações' (só para usuarios_aprovador_liberacao)."""
-    from .decorators import aprovador_required as _ar  # noqa
+    """Tela 'Aprovar Liberações' (só para usuarios_aprovador_liberacao).
+
+    Lista TODAS as solicitações (pendentes + decididas). Default filtro
+    client-side = Pendentes. Linhas pendentes ganham botões Aprovar/Recusar;
+    decididas mostram detalhes da decisão.
+    """
     from . import liberacoes_service
 
     username = request.session.get('username', '')
     if not usuario_pode_aprovar_liberacao(username):
         return redirect('painel')
 
-    pendentes = liberacoes_service.listar_pendentes()
+    historico = liberacoes_service.listar_historico()
+    total_pendentes = sum(1 for s in historico if s.get('flagStatus') == 'P')
     return render(request, 'liberacoes_aprovar.html', {
-        'pendentes': pendentes,
-        'total': len(pendentes),
+        'pendentes': historico,  # agora é o histórico completo (pendentes + decididas)
+        'total': len(historico),
+        'total_pendentes': total_pendentes,
         'username': username,
         'pode_gerenciar_usuarios': usuario_pode_gerenciar_usuarios(username),
         'tem_acesso_configuracao': usuario_tem_acesso_configuracao(username),
@@ -2888,30 +2894,6 @@ def liberacao_decidir_ajax(request):
     except Exception as e:
         logger.exception("❌ Erro ao decidir liberação")
         return JsonResponse({'success': False, 'message': f'Erro interno: {e}'}, status=500)
-
-
-@token_required
-def liberacoes_historico_view(request):
-    """Tela de Histórico de Liberações (só aprovadores).
-
-    Lista TODAS as solicitações (pendentes + decididas). Filtros são
-    aplicados client-side via JS (default: status = Pendente).
-    """
-    from . import liberacoes_service
-
-    username = request.session.get('username', '')
-    if not usuario_pode_aprovar_liberacao(username):
-        return redirect('painel')
-
-    historico = liberacoes_service.listar_historico()
-    return render(request, 'liberacoes_historico.html', {
-        'historico': historico,
-        'total': len(historico),
-        'username': username,
-        'pode_gerenciar_usuarios': usuario_pode_gerenciar_usuarios(username),
-        'tem_acesso_configuracao': usuario_tem_acesso_configuracao(username),
-        'pode_aprovar_liberacao': True,  # já validado acima
-    })
 
 
 @token_required

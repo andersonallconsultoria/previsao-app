@@ -28,6 +28,11 @@
     .num{ text-align:right; font-variant-numeric: tabular-nums;}
     .pill-tentativas{ display:inline-block; padding:2px 8px; border-radius:999px; background:#fef3c7; color:#92400e; font-weight:800; font-size:12px;}
     .pill-origem{ display:inline-block; padding:2px 8px; border-radius:6px; background:#e0e7ff; color:#3730a3; font-weight:700; font-size:11px;}
+    .pill-status{ display:inline-flex; padding:4px 10px; border-radius:999px; font-weight:800; font-size:11px; white-space:nowrap;}
+    .pill-status-P{ background:#fff7ed; color:#b54708; border:1px solid #fed7aa;}
+    .pill-status-A{ background:#ecfdf3; color:#1f9d57; border:1px solid #bbf7d0;}
+    .pill-status-U{ background:#dbf6e6; color:#0f6848; border:1px solid #86efac;}
+    .pill-status-R{ background:#fff1f2; color:#dc2626; border:1px solid #fecdd3;}
     .btn-aprovar{ background:#16a34a; color:#fff; border:0; padding:6px 12px; border-radius:6px; font-weight:700; cursor:pointer; margin-right:4px;}
     .btn-recusar{ background:#dc2626; color:#fff; border:0; padding:6px 12px; border-radius:6px; font-weight:700; cursor:pointer;}
     .btn-aprovar:hover, .btn-recusar:hover{ opacity:.85;}
@@ -72,12 +77,39 @@
     <div class="card">
       <div class="card-title">
         <div>
-          <h2>Fila de solicitações pendentes <span class="badge-pendentes" id="badgeTotal">{{ total }}</span></h2>
+          <h2>Solicitações <span class="badge-pendentes" id="badgeTotal">{{ total_pendentes }}</span></h2>
           <small>Auto-refresh a cada 30 segundos. Última atualização: <span id="lastUpdate">agora</span>.</small>
         </div>
         <div>
           <button class="btn-coe primary" onclick="atualizar()">🔄 Atualizar agora</button>
         </div>
+      </div>
+
+      <!-- Filtros -->
+      <div style="padding:14px 16px; border-bottom:1px solid #e6ebf0; display:flex; gap:12px; align-items:end; flex-wrap:wrap; background:#f8fafc;">
+        <div>
+          <label style="font-size:12px; color:#475569; font-weight:700; display:block; margin-bottom:4px;">Status</label>
+          <select id="fStatus" style="height:38px; border:1px solid #d1d5db; border-radius:8px; padding:0 10px; font-size:14px; min-width:170px;">
+            <option value="P" selected>⏳ Pendentes</option>
+            <option value="A">✓ Aprovadas</option>
+            <option value="U">✅ Usadas</option>
+            <option value="R">✗ Recusadas</option>
+            <option value="">Todos</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:12px; color:#475569; font-weight:700; display:block; margin-bottom:4px;">Empresa</label>
+          <input type="text" id="fEmpresa" placeholder="Ex: 1" style="height:38px; border:1px solid #d1d5db; border-radius:8px; padding:0 10px; font-size:14px; width:90px;" inputmode="numeric">
+        </div>
+        <div>
+          <label style="font-size:12px; color:#475569; font-weight:700; display:block; margin-bottom:4px;">Centro</label>
+          <input type="text" id="fCentro" placeholder="Ex: 5" style="height:38px; border:1px solid #d1d5db; border-radius:8px; padding:0 10px; font-size:14px; width:90px;" inputmode="numeric">
+        </div>
+        <div style="flex:1; min-width:200px;">
+          <label style="font-size:12px; color:#475569; font-weight:700; display:block; margin-bottom:4px;">Solicitante / Aprovador</label>
+          <input type="text" id="fUsuario" placeholder="Ex: ANDERSON" style="height:38px; border:1px solid #d1d5db; border-radius:8px; padding:0 10px; font-size:14px; width:100%;">
+        </div>
+        <div style="color:#6b7a89; font-size:13px;" id="stats"><b>—</b> de <b>{{ total }}</b></div>
       </div>
 
       <div class="table-wrap">
@@ -86,22 +118,37 @@
           <thead>
             <tr>
               <th>#</th>
+              <th>Status</th>
               <th>Solicitante</th>
               <th>Empresa / Centro / Conta</th>
               <th>Mês/Ano</th>
-              <th class="num">Previsto</th>
-              <th class="num">Realizado</th>
               <th class="num">Excedente</th>
               <th class="num">Valor lançamento</th>
-              <th>Tentativas</th>
               <th>Origem</th>
+              <th>Tipo / Aprovador</th>
               <th>Ações</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody id="tbodyHist">
             {% for s in pendentes %}
-            <tr data-id="{{ s.idsolicitacao }}">
+            <tr data-id="{{ s.idsolicitacao }}"
+                data-status="{{ s.flagStatus }}"
+                data-empresa="{{ s.idempresa }}"
+                data-centro="{{ s.idcentroresultado }}"
+                data-userso="{% firstof s.usersoSol "" %}"
+                data-aprovador="{% firstof s.usuarioAprovador "" %}">
               <td>{{ s.idsolicitacao }}</td>
+              <td>
+                {% with st=s.flagStatus %}
+                  <span class="pill-status pill-status-{{ st }}">
+                    {% if st == 'P' %}⏳ Pendente
+                    {% elif st == 'A' %}✓ Aprovada
+                    {% elif st == 'U' %}✅ Usada
+                    {% elif st == 'R' %}✗ Recusada
+                    {% else %}{{ st }}{% endif %}
+                  </span>
+                {% endwith %}
+              </td>
               <td><b>{% firstof s.usersoSol s.idusuarioSol "-" %}</b></td>
               <td>
                 Emp: <b>{{ s.idempresa }}</b><br>
@@ -109,24 +156,56 @@
                 Cta: <b>{{ s.idctacontabil }}</b>
               </td>
               <td>{% if s.dtmovimento %}{{ s.dtmovimento|slice:"5:7" }}/{{ s.dtmovimento|slice:":4" }}{% else %}-{% endif %}</td>
-              <td class="num">{{ s.valorPrevisto|floatformat:2 }}</td>
-              <td class="num">{{ s.valorRealizado|floatformat:2 }}</td>
-              <td class="num"><b style="color:#dc2626;">{{ s.valorExcedente|floatformat:2 }}</b></td>
+              <td class="num">
+                {% if s.valorExcedente %}
+                  <b style="color:#dc2626;">{{ s.valorExcedente|floatformat:2 }}</b>
+                {% else %}<span style="color:#9ca3af">—</span>{% endif %}
+              </td>
               <td class="num">{{ s.vallancamento|floatformat:2 }}</td>
-              <td><span class="pill-tentativas">🔄 {{ s.numTentativas|default:1 }}</span></td>
               <td><span class="pill-origem">{{ s.origem|default:"-" }}</span></td>
               <td>
-                <button class="btn-aprovar" onclick='abrirModal({{ s.idsolicitacao }}, "A", {{ s.valorPrevisto|default:0 }}, {{ s.valorRealizado|default:0 }}, {{ s.vallancamento|default:0 }})'>✓ Aprovar</button>
-                <button class="btn-recusar" onclick='abrirModal({{ s.idsolicitacao }}, "R", {{ s.valorPrevisto|default:0 }}, {{ s.valorRealizado|default:0 }}, {{ s.vallancamento|default:0 }})'>✗ Recusar</button>
+                {% if s.tipoLiberacao %}
+                  <div style="font-weight:700;">
+                    {% if s.tipoLiberacao == 'U' %}🔒 One-shot
+                    {% elif s.tipoLiberacao == 'V' %}💰 R$ {{ s.valorLibExtra|floatformat:2 }}
+                    {% elif s.tipoLiberacao == 'P' %}📊 {{ s.percLibExtra|floatformat:1 }}%
+                    {% else %}{{ s.tipoLiberacao }}{% endif %}
+                  </div>
+                  <small style="color:#64748b;">por {% firstof s.usuarioAprovador "—" %}</small>
+                  <details style="margin-top:4px;">
+                    <summary>Detalhes</summary>
+                    <div style="background:#f9fafb; padding:8px; border-radius:6px; margin-top:6px; font-size:11px; color:#374151;">
+                      <b>Decisão:</b> {% firstof s.dtDecisao "—" %}<br>
+                      <b>Observação:</b> {% firstof s.observacao "(vazia)" %}<br>
+                      <b>Justificativa:</b> {% firstof s.justificativa "(vazia)" %}<br>
+                      {% if s.tipoLiberacao == 'V' and s.valorJaConsumido %}
+                      <b>Consumido:</b> R$ {{ s.valorJaConsumido|floatformat:2 }}<br>
+                      {% endif %}
+                    </div>
+                  </details>
+                {% else %}
+                  <span style="color:#9ca3af; font-size:12px;">— aguardando —</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if s.flagStatus == 'P' %}
+                  <button class="btn-aprovar" onclick='abrirModal({{ s.idsolicitacao }}, "A", {{ s.valorPrevisto|default:0 }}, {{ s.valorRealizado|default:0 }}, {{ s.vallancamento|default:0 }})'>✓ Aprovar</button>
+                  <button class="btn-recusar" onclick='abrirModal({{ s.idsolicitacao }}, "R", {{ s.valorPrevisto|default:0 }}, {{ s.valorRealizado|default:0 }}, {{ s.vallancamento|default:0 }})'>✗ Recusar</button>
+                {% else %}
+                  <span style="color:#9ca3af; font-size:11px;">{% if s.flagStatus == 'U' %}consumida{% elif s.flagStatus == 'A' %}aguardando consumo{% else %}—{% endif %}</span>
+                {% endif %}
               </td>
             </tr>
             {% endfor %}
           </tbody>
         </table>
+        <div class="empty" id="emptyMsg" style="display:none;">
+          <h3>📭 Nenhuma solicitação encontrada com esses filtros</h3>
+          <p>Ajuste o status ou limpe os filtros pra ver outras.</p>
+        </div>
         {% else %}
         <div class="empty">
-          <h3>📭 Nenhuma solicitação pendente</h3>
-          <p>Quando alguém estourar um previsto, a solicitação aparecerá aqui automaticamente.</p>
+          <h3>📭 Nenhuma solicitação</h3>
         </div>
         {% endif %}
       </div>
@@ -298,6 +377,47 @@ async function confirmar(){
 function atualizar(){
   window.location.reload();
 }
+
+// Filtros client-side
+function aplicarFiltros(){
+  const fStatus = (document.getElementById('fStatus')?.value || '').toUpperCase();
+  const fEmpresa = (document.getElementById('fEmpresa')?.value || '').trim();
+  const fCentro = (document.getElementById('fCentro')?.value || '').trim();
+  const fUsuario = (document.getElementById('fUsuario')?.value || '').trim().toUpperCase();
+
+  let visiveis = 0;
+  const linhas = document.querySelectorAll('#tbodyHist tr');
+  linhas.forEach(tr => {
+    const status = tr.dataset.status || '';
+    const empresa = tr.dataset.empresa || '';
+    const centro = tr.dataset.centro || '';
+    const userso = (tr.dataset.userso || '').toUpperCase();
+    const aprovador = (tr.dataset.aprovador || '').toUpperCase();
+
+    let ok = true;
+    if (fStatus && status !== fStatus) ok = false;
+    if (fEmpresa && empresa !== fEmpresa) ok = false;
+    if (fCentro && centro !== fCentro) ok = false;
+    if (fUsuario && !userso.includes(fUsuario) && !aprovador.includes(fUsuario)) ok = false;
+
+    tr.style.display = ok ? '' : 'none';
+    if (ok) visiveis++;
+  });
+
+  const total = linhas.length;
+  const stats = document.getElementById('stats');
+  if (stats) stats.innerHTML = `<b>${visiveis}</b> de <b>${total}</b>`;
+  const empty = document.getElementById('emptyMsg');
+  if (empty) empty.style.display = visiveis === 0 && total > 0 ? 'block' : 'none';
+}
+
+document.querySelectorAll('#fStatus, #fEmpresa, #fCentro, #fUsuario').forEach(el => {
+  el.addEventListener('input', aplicarFiltros);
+  el.addEventListener('change', aplicarFiltros);
+});
+
+// Aplica filtro default (Pendentes)
+aplicarFiltros();
 
 // Auto-refresh a cada 30s
 setInterval(atualizar, 30000);

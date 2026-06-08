@@ -102,7 +102,7 @@
             {% for s in pendentes %}
             <tr data-id="{{ s.idsolicitacao }}">
               <td>{{ s.idsolicitacao }}</td>
-              <td><b>{{ s.usersoSol|default:s.idusuarioSol|default:"-" }}</b></td>
+              <td><b>{% firstof s.usersoSol s.idusuarioSol "-" %}</b></td>
               <td>
                 Emp: <b>{{ s.idempresa }}</b><br>
                 CR: <b>{{ s.idcentroresultado }}</b><br>

@@ -106,6 +106,14 @@ def decidir(idsolicitacao, decisao, tipo_liberacao, valor_extra, perc_extra,
     return _parse_mensagem_ok_erro(resp)
 
 
+def listar_historico():
+    """Lista TODAS as solicitações (pendentes primeiro, depois mais recentes).
+    Limitado a 500 registros — filtros e ordenação avançada são client-side."""
+    payload = {"page": 1, "limit": 500, "clausulas": []}
+    resp = _post_endpoint("liberacao_historico", payload, timeout=30)
+    return resp.get("data", [])
+
+
 def criar(idempresa, idcentroresultado, idctacontabil, dtmovimento,
           vallancamento, justificativa, idusuario, userso):
     """Cria uma solicitação manual (antes do operador tentar lançar).

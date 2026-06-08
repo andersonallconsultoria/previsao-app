@@ -1,0 +1,229 @@
+{% load custom_filters %}
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <title>Histórico de Liberações</title>
+  <style>
+    body{ margin:0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+          background: linear-gradient(135deg, #004AAD, #1ABC9C); min-height:100vh; color:#0b1b2a;}
+    .topbar{ padding:18px 22px; display:flex; justify-content:space-between; align-items:center; color:#fff; gap:16px; flex-wrap:wrap;}
+    .brand{ font-size:24px; font-weight:800; display:flex; gap:8px; align-items:center;}
+    .actions a{ background: rgba(255,255,255,.2); color:#fff; padding:10px 14px; border-radius:10px;
+                text-decoration:none; font-weight:700; display:inline-block;}
+    .actions a:hover{ background: rgba(255,255,255,.3);}
+    .wrap{ padding: 0 22px 28px;}
+
+    .filters-box{ background: rgba(255,255,255,.95); border-radius:14px; padding:16px;
+                  box-shadow: 0 10px 30px rgba(0,0,0,.12); margin-bottom:14px;
+                  display:flex; gap:16px; align-items:end; flex-wrap:wrap;}
+    .filters-box label{ font-size:12px; color:#475569; font-weight:700; display:block; margin-bottom:4px;}
+    .filters-box select, .filters-box input{ height:38px; border:1px solid #d1d5db; border-radius:8px;
+                                              padding: 0 10px; font-size:14px; min-width:160px;}
+    .filters-box .stats{ flex:1; text-align:right; color:#6b7a89; font-size:13px;}
+    .filters-box .stats b{ color:#0b1b2a; font-size:14px;}
+
+    .card{ background:#fff; border-radius:14px; box-shadow: 0 10px 30px rgba(0,0,0,.12); overflow:hidden;}
+    .card-title{ padding:16px; border-bottom:1px solid #e6ebf0; display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;}
+    .card-title h2{ margin:0; font-size:20px; font-weight:900;}
+    .pill-info{ background:#f2f6ff; color:#264b9b; padding:4px 10px; border-radius:999px; font-size:12px; font-weight:800;}
+
+    .table-wrap{ overflow:auto; max-height:75vh;}
+    table.lib{ width:100%; border-collapse:separate; border-spacing:0; font-size:13px;}
+    table.lib thead th{ position:sticky; top:0; background:#2f343a; color:#fff; padding:10px;
+                        text-align:left; font-weight:800; white-space:nowrap; z-index:2;}
+    table.lib tbody td{ border-bottom:1px solid #e6ebf0; padding:10px; vertical-align:top;}
+    table.lib tbody tr:hover td{ background:#f8fafc;}
+    .num{ text-align:right; font-variant-numeric:tabular-nums;}
+
+    .status{ display:inline-flex; padding:4px 10px; border-radius:999px; font-weight:800; font-size:11px;}
+    .status.P{ background:#fff7ed; color:#b54708; border:1px solid #fed7aa;}
+    .status.A{ background:#ecfdf3; color:#1f9d57; border:1px solid #bbf7d0;}
+    .status.U{ background:#dbf6e6; color:#0f6848; border:1px solid #86efac;}
+    .status.R{ background:#fff1f2; color:#dc2626; border:1px solid #fecdd3;}
+
+    .pill-tipo{ background:#eef2ff; color:#3730a3; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:800;}
+    .pill-tipo.U{ background:#fef3c7; color:#92400e;}
+    .pill-tipo.V{ background:#e0e7ff; color:#3730a3;}
+    .pill-tipo.P{ background:#fce7f3; color:#9d174d;}
+
+    details summary{ cursor:pointer; color:#1a355c; font-weight:700; font-size:12px;}
+    details .meta{ background:#f9fafb; padding:8px; border-radius:6px; margin-top:6px; font-size:12px;
+                    color:#374151; line-height:1.4;}
+
+    .empty{ padding:48px; text-align:center; color:#6b7a89;}
+    .empty h3{ margin:0 0 8px; font-size:20px; color:#0b1b2a;}
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">📚 Histórico de Liberações</div>
+  <div class="actions">
+    <a href="{% url 'painel' %}">← Painel</a>
+    <a href="{% url 'liberacoes_aprovar' %}">✅ Aprovar</a>
+    <a href="{% url 'logout' %}">Sair</a>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <div class="filters-box">
+    <div>
+      <label>Status</label>
+      <select id="fStatus">
+        <option value="P" selected>⏳ Pendentes</option>
+        <option value="A">✓ Aprovadas</option>
+        <option value="U">✅ Usadas</option>
+        <option value="R">✗ Recusadas</option>
+        <option value="">Todos</option>
+      </select>
+    </div>
+    <div>
+      <label>Empresa</label>
+      <input type="text" id="fEmpresa" placeholder="Ex: 1" inputmode="numeric">
+    </div>
+    <div>
+      <label>Centro</label>
+      <input type="text" id="fCentro" placeholder="Ex: 5" inputmode="numeric">
+    </div>
+    <div>
+      <label>Solicitante / Aprovador</label>
+      <input type="text" id="fUsuario" placeholder="Ex: ANDERSON">
+    </div>
+    <div class="stats" id="stats">— de —</div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">
+      <h2>Solicitações</h2>
+      <span class="pill-info" id="pillTotal">Total: {{ total }}</span>
+    </div>
+
+    <div class="table-wrap">
+      {% if historico %}
+      <table class="lib" id="tblHistorico">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Status</th>
+            <th>Solicitante</th>
+            <th>Empresa / Centro / Conta</th>
+            <th>Mês/Ano</th>
+            <th class="num">Valor lançamento</th>
+            <th>Tipo</th>
+            <th>Aprovador</th>
+            <th>Decisão em</th>
+            <th>Detalhes</th>
+          </tr>
+        </thead>
+        <tbody id="tbodyHist">
+          {% for s in historico %}
+          <tr data-status="{{ s.flagStatus }}"
+              data-empresa="{{ s.idempresa }}"
+              data-centro="{{ s.idcentroresultado }}"
+              data-userso="{% firstof s.usersoSol "" %}"
+              data-aprovador="{% firstof s.usuarioAprovador "" %}">
+            <td>{{ s.idsolicitacao }}</td>
+            <td>
+              {% with st=s.flagStatus %}
+                <span class="status {{ st }}">
+                  {% if st == 'P' %}⏳ Pendente
+                  {% elif st == 'A' %}✓ Aprovada
+                  {% elif st == 'U' %}✅ Usada
+                  {% elif st == 'R' %}✗ Recusada
+                  {% else %}{{ st }}{% endif %}
+                </span>
+              {% endwith %}
+            </td>
+            <td><b>{% firstof s.usersoSol s.idusuarioSol "-" %}</b></td>
+            <td>
+              Emp: <b>{{ s.idempresa }}</b><br>
+              CR: <b>{{ s.idcentroresultado }}</b><br>
+              Cta: <b>{{ s.idctacontabil }}</b>
+            </td>
+            <td>{% if s.dtmovimento %}{{ s.dtmovimento|slice:"5:7" }}/{{ s.dtmovimento|slice:":4" }}{% else %}-{% endif %}</td>
+            <td class="num">{{ s.vallancamento|floatformat:2 }}</td>
+            <td>
+              {% if s.tipoLiberacao %}
+                <span class="pill-tipo {{ s.tipoLiberacao }}">
+                  {% if s.tipoLiberacao == 'U' %}🔒 One-shot
+                  {% elif s.tipoLiberacao == 'V' %}💰 R$ {{ s.valorLibExtra|floatformat:2 }}
+                  {% elif s.tipoLiberacao == 'P' %}📊 {{ s.percLibExtra|floatformat:1 }}%
+                  {% else %}{{ s.tipoLiberacao }}{% endif %}
+                </span>
+              {% else %}<span style="color:#9ca3af">—</span>{% endif %}
+            </td>
+            <td>{% firstof s.usuarioAprovador "—" %}</td>
+            <td>{% firstof s.dtDecisao "—" %}</td>
+            <td>
+              <details>
+                <summary>Ver</summary>
+                <div class="meta">
+                  <b>Solicitado:</b> {% firstof s.dtSolicitacao "-" %}<br>
+                  <b>Origem:</b> {% firstof s.origem "-" %}<br>
+                  <b>Tentativas:</b> {% firstof s.numTentativas 1 %}<br>
+                  <b>Previsto:</b> R$ {{ s.valorPrevisto|default:0|floatformat:2 }}<br>
+                  <b>Realizado:</b> R$ {{ s.valorRealizado|default:0|floatformat:2 }}<br>
+                  <b>Excedente:</b> R$ {{ s.valorExcedente|default:0|floatformat:2 }}<br>
+                  <b>Justificativa:</b> {% firstof s.justificativa "(vazia)" %}<br>
+                  <b>Observação aprovador:</b> {% firstof s.observacao "(vazia)" %}<br>
+                  {% if s.tipoLiberacao == 'V' and s.valorJaConsumido %}
+                  <b>Consumido:</b> R$ {{ s.valorJaConsumido|floatformat:2 }}<br>
+                  {% endif %}
+                </div>
+              </details>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="empty">
+        <h3>📭 Nenhuma solicitação encontrada</h3>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<script>
+function aplicarFiltros(){
+  const fStatus = document.getElementById('fStatus').value.toUpperCase();
+  const fEmpresa = document.getElementById('fEmpresa').value.trim();
+  const fCentro = document.getElementById('fCentro').value.trim();
+  const fUsuario = document.getElementById('fUsuario').value.trim().toUpperCase();
+
+  let visiveis = 0;
+  const linhas = document.querySelectorAll('#tbodyHist tr');
+  linhas.forEach(tr => {
+    const status = tr.dataset.status || '';
+    const empresa = tr.dataset.empresa || '';
+    const centro = tr.dataset.centro || '';
+    const userso = (tr.dataset.userso || '').toUpperCase();
+    const aprovador = (tr.dataset.aprovador || '').toUpperCase();
+
+    let ok = true;
+    if (fStatus && status !== fStatus) ok = false;
+    if (fEmpresa && empresa !== fEmpresa) ok = false;
+    if (fCentro && centro !== fCentro) ok = false;
+    if (fUsuario && !userso.includes(fUsuario) && !aprovador.includes(fUsuario)) ok = false;
+
+    tr.style.display = ok ? '' : 'none';
+    if (ok) visiveis++;
+  });
+
+  const total = linhas.length;
+  document.getElementById('stats').innerHTML = `<b>${visiveis}</b> de <b>${total}</b> visíveis`;
+}
+
+document.querySelectorAll('#fStatus, #fEmpresa, #fCentro, #fUsuario').forEach(el => {
+  el.addEventListener('input', aplicarFiltros);
+  el.addEventListener('change', aplicarFiltros);
+});
+
+aplicarFiltros();  // aplica filtro default (Pendentes)
+</script>
+
+</body>
+</html>

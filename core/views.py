@@ -2891,6 +2891,30 @@ def liberacao_decidir_ajax(request):
 
 
 @token_required
+def liberacoes_historico_view(request):
+    """Tela de Histórico de Liberações (só aprovadores).
+
+    Lista TODAS as solicitações (pendentes + decididas). Filtros são
+    aplicados client-side via JS (default: status = Pendente).
+    """
+    from . import liberacoes_service
+
+    username = request.session.get('username', '')
+    if not usuario_pode_aprovar_liberacao(username):
+        return redirect('painel')
+
+    historico = liberacoes_service.listar_historico()
+    return render(request, 'liberacoes_historico.html', {
+        'historico': historico,
+        'total': len(historico),
+        'username': username,
+        'pode_gerenciar_usuarios': usuario_pode_gerenciar_usuarios(username),
+        'tem_acesso_configuracao': usuario_tem_acesso_configuracao(username),
+        'pode_aprovar_liberacao': True,  # já validado acima
+    })
+
+
+@token_required
 def liberacao_count_ajax(request):
     """Endpoint AJAX para o badge de contagem de pendentes."""
     from . import liberacoes_service

@@ -2536,6 +2536,12 @@ def _get_lista_cached(nome_cache, endpoint, headers, force_refresh=False, limit=
         page = 1
         while True:
             resp = requests.post(url, json={"page": page, "limit": limit}, headers=headers, timeout=60)
+            # Auto-retry em 401: token pode ter expirado/sido revogado
+            if resp.status_code == 401:
+                logger.info(f"🔄 {nome_cache}: 401 na página {page}, forçando refresh do service token")
+                get_service_token(force_refresh=True)
+                headers = get_api_headers()  # pega o token novo
+                resp = requests.post(url, json={"page": page, "limit": limit}, headers=headers, timeout=60)
             if resp.status_code != 200:
                 logger.warning(f"⚠️ {nome_cache}: API retornou {resp.status_code} na página {page}")
                 break

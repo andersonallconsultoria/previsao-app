@@ -24,10 +24,17 @@ def _post_endpoint(endpoint, payload, timeout=30):
 
     Para endpoints SELECT, payload é dict com page/limit/clausulas.
     Para endpoints FUNCTION/PROCEDURE, payload é list de dict com chaves UPPERCASE.
+
+    Auto-retry em caso de 401 (token expirado/revogado): força refresh do
+    service token e tenta uma vez mais.
     """
     url = f"{_v.get_dynamic_config('API_BASE_URL')}/cisspoder-service/{endpoint}"
     try:
         resp = requests.post(url, json=payload, headers=_v.get_api_headers(), timeout=timeout)
+        if resp.status_code == 401:
+            logger.info(f"🔄 {endpoint}: 401, forçando refresh do service token e tentando de novo")
+            _v.get_service_token(force_refresh=True)
+            resp = requests.post(url, json=payload, headers=_v.get_api_headers(), timeout=timeout)
         if resp.status_code == 200:
             return resp.json()
         logger.warning(f"⚠️ {endpoint} retornou {resp.status_code}: {resp.text[:200]}")

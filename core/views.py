@@ -3003,11 +3003,11 @@ def painel_view(request):
             centro = str(centro_preselect_id) if centro_preselect_id else ''
 
     # Carrega dados sempre (não-eager apenas pro POST atual; v2 é eager)
-    contas = []
     erro_api = None
     consultou = False
+    payload_dados = {"modo": "por_conta", "grupos": []}
 
-    if not sem_centros_permitidos and centro:
+    if not sem_centros_permitidos:
         consultou = True
         payload = {
             "page": 1, "limit": 1000,
@@ -3038,27 +3038,61 @@ def painel_view(request):
             erro_api = str(e)
             logger.exception("❌ Painel v2 - erro centro_resultado_bi")
 
-        # Reaproveita agrupar_resultados (modo "por conta")
-        agrupado = agrupar_resultados(dados, agrupar_por_centro=False, agrupar_por_empresa=False)
-        agrup = agrupado.get('agrupado', {})
+        # Decide o modo de agrupamento conforme filtros aplicados
+        if not centro and not empresa:
+            modo = "por_empresa"
+        elif not centro and empresa:
+            modo = "por_centro"
+        else:
+            modo = "por_conta"
 
-        # Formato pro JS: lista de {code, name, values[12][prev, real]}
-        # 'conta' vem como "<codigo> - <nome>" (concat na function DB2 retornou em CONTABIL)
-        for conta_str, meses_data in agrup.items():
-            partes = str(conta_str).split(' - ', 1)
-            code = partes[0].strip() if partes else str(conta_str)
-            name = partes[1].strip() if len(partes) > 1 else ''
-            values = []
-            for mes in range(1, 13):
-                m_key = f"{mes:02d}"
-                d = meses_data.get(m_key, {})
-                values.append([
-                    float(d.get('previsto') or 0),
-                    float(d.get('realizado') or 0),
-                ])
-            contas.append({"code": code, "name": name, "values": values})
+        from collections import defaultdict
+        # Estrutura: grupo_label -> conta_key -> mes -> {prev, real}
+        agrup_grupos = defaultdict(lambda: defaultdict(lambda: {f"{m:02d}": {"previsto": 0.0, "realizado": 0.0} for m in range(1, 13)}))
 
-        contas.sort(key=lambda x: x.get("code", ""))
+        for item in dados:
+            conta = item.get("contabil")
+            mes_raw = item.get("mesNum")
+            if not conta or mes_raw is None:
+                continue
+            try:
+                mes_key = f"{int(mes_raw):02d}"
+            except Exception:
+                continue
+
+            if modo == "por_empresa":
+                grupo_label = (
+                    item.get("empresa") or item.get("EMPRESA") or item.get("empresaNome") or "Empresa não identificada"
+                )
+            elif modo == "por_centro":
+                grupo_label = (
+                    item.get("centroresultados") or item.get("centroResultados") or item.get("CENTRO_RESULTADOS") or "Sem Centro"
+                )
+            else:
+                grupo_label = "TOTAL"
+
+            d = agrup_grupos[grupo_label][conta][mes_key]
+            d["previsto"] += float(item.get("valorPrevisto") or 0)
+            d["realizado"] += float(item.get("valorRealizado") or 0)
+
+        # Converte pra estrutura final do JSON
+        grupos_list = []
+        for grupo_label in sorted(agrup_grupos.keys()):
+            contas_grupo = []
+            for conta_str, meses in agrup_grupos[grupo_label].items():
+                partes = str(conta_str).split(' - ', 1)
+                code = partes[0].strip() if partes else str(conta_str)
+                name = partes[1].strip() if len(partes) > 1 else ''
+                values = []
+                for mes in range(1, 13):
+                    m_key = f"{mes:02d}"
+                    d = meses.get(m_key, {})
+                    values.append([float(d.get('previsto') or 0), float(d.get('realizado') or 0)])
+                contas_grupo.append({"code": code, "name": name, "values": values})
+            contas_grupo.sort(key=lambda x: x.get("code", ""))
+            grupos_list.append({"label": grupo_label, "contas": contas_grupo})
+
+        payload_dados = {"modo": modo, "grupos": grupos_list}
 
     context = {
         'empresas': empresas,
@@ -3067,7 +3101,7 @@ def painel_view(request):
         'ano_atual': ano_atual,
         'empresa': empresa,
         'centro': centro,
-        'contas_json': json.dumps(contas, ensure_ascii=False),
+        'contas_json': json.dumps(payload_dados, ensure_ascii=False),
         'consultou': consultou,
         'erro_api': erro_api,
         'sem_centros_permitidos': sem_centros_permitidos,

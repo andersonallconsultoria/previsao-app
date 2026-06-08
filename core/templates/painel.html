@@ -270,7 +270,15 @@
   const empresaLabel = {{ empresa|default:0 }} ? document.querySelector('#empresa option:checked')?.textContent || "" : "Todas";
   const centroLabel = document.querySelector('#centro option:checked')?.textContent || "—";
   const ano = "{{ ano }}";
-  const accounts = JSON.parse(document.getElementById('contas-data').textContent || '[]');
+  const rawPayload = JSON.parse(document.getElementById('contas-data').textContent || '{}');
+  // Compat: se vier no formato antigo (array), trata como 1 grupo só por_conta
+  const payload = Array.isArray(rawPayload)
+    ? {modo: "por_conta", grupos: [{label: "TOTAL", contas: rawPayload}]}
+    : (rawPayload.grupos ? rawPayload : {modo: "por_conta", grupos: []});
+  const modo = payload.modo || "por_conta";
+  const grupos = payload.grupos || [];
+  // Lista achatada de contas (pra KPIs e totalizadores globais)
+  const accounts = grupos.flatMap(g => g.contas || []);
 
   const months = [
     {key:'01',label:`01 / ${ano}`,short:'Jan'},{key:'02',label:`02 / ${ano}`,short:'Fev'},
@@ -343,32 +351,74 @@
       </tr>`;
   }
 
+  function renderAccountRow(acc){
+    const t=accountTotals(acc);
+    const monthCells=months.map((m,idx)=>{
+      const [prev,real]=acc.values[idx];
+      const saldo=prev-real, pc=percent(real,prev);
+      const pcClass=pc>100?'high':pc>=85?'medium':'low';
+      const realClass=saldo<0?'bad':real>0?'ok':'';
+      return `
+        <td class="num month-detail prev" data-month="${m.key}">${brl(prev)}</td>
+        <td class="num month-detail real ${realClass}" data-month="${m.key}">${brl(real)}</td>
+        <td class="num month-detail saldo ${saldo<0?'negative':'positive'}" data-month="${m.key}">${brl(saldo)}</td>
+        <td class="num month-detail percent ${pcClass}" data-month="${m.key}">${pc===999?'Sem orç.':pc.toFixed(1)+'%'}</td>
+        <td class="month-summary-cell ${saldo<0?'saldo negative':'saldo positive'}" data-month-summary="${m.key}">${brl(saldo)}</td>`;
+    }).join('');
+    return `<tr data-account="${acc.code}">
+      <td class="account-cell"><span class="account-code">${acc.code}</span><span class="account-name">${acc.name||'—'}</span></td>
+      ${monthCells}
+      <td class="num prev"><strong>${brl(t.previsto)}</strong></td>
+      <td class="num real ${t.saldo<0?'bad':'ok'}"><strong>${brl(t.realizado)}</strong></td>
+      <td class="num saldo ${t.saldo<0?'negative':'positive'}"><strong>${brl(t.saldo)}</strong></td>
+      <td>${statusBadge(t.previsto,t.realizado)}</td>
+    </tr>`;
+  }
+
+  function renderSubtotalRow(label, contas, icone){
+    const monthCells=months.map((m,idx)=>{
+      const prev=contas.reduce((s,a)=>s+a.values[idx][0],0);
+      const real=contas.reduce((s,a)=>s+a.values[idx][1],0);
+      const saldo=prev-real, pc=percent(real,prev);
+      return `
+        <td class="num month-detail prev" data-month="${m.key}">${brl(prev)}</td>
+        <td class="num month-detail real ${saldo<0?'bad':'ok'}" data-month="${m.key}">${brl(real)}</td>
+        <td class="num month-detail saldo ${saldo<0?'negative':'positive'}" data-month="${m.key}">${brl(saldo)}</td>
+        <td class="num month-detail percent ${pc>100?'high':pc>=85?'medium':'low'}" data-month="${m.key}">${pc===999?'Sem orç.':pc.toFixed(1)+'%'}</td>
+        <td class="month-summary-cell ${saldo<0?'saldo negative':'saldo positive'}" data-month-summary="${m.key}">${brl(saldo)}</td>`;
+    }).join('');
+    const tot=contas.reduce((acc,a)=>{const t=accountTotals(a);acc.prev+=t.previsto;acc.real+=t.realizado;return acc;},{prev:0,real:0});
+    const saldoTot=tot.prev-tot.real;
+    return `<tr style="background:#fff7ed;font-weight:700;">
+      <td class="account-cell" style="background:#fff7ed;"><span class="account-code">${icone}</span><span class="account-name">SUBTOTAL ${label}</span></td>
+      ${monthCells}
+      <td class="num prev"><strong>${brl(tot.prev)}</strong></td>
+      <td class="num real ${saldoTot<0?'bad':'ok'}"><strong>${brl(tot.real)}</strong></td>
+      <td class="num saldo ${saldoTot<0?'negative':'positive'}"><strong>${brl(saldoTot)}</strong></td>
+      <td>${statusBadge(tot.prev,tot.real)}</td>
+    </tr>`;
+  }
+
+  function renderGroupHeader(label, icone){
+    const colspan = 1 + (months.length * 5) + 4;
+    return `<tr><td colspan="${colspan}" style="background:linear-gradient(90deg,#1ABC9C,#004AAD);color:#fff;padding:10px 14px;font-weight:800;font-size:15px;letter-spacing:.3px;">${icone} ${label}</td></tr>`;
+  }
+
   function renderTableBody(){
     const tbody=document.getElementById('tableBody');
     if(!accounts.length){ tbody.innerHTML=`<tr><td colspan="60" style="text-align:center;padding:24px;">Nenhuma conta encontrada.</td></tr>`; return; }
-    const accountRows=accounts.map(acc=>{
-      const t=accountTotals(acc);
-      const monthCells=months.map((m,idx)=>{
-        const [prev,real]=acc.values[idx];
-        const saldo=prev-real, pc=percent(real,prev);
-        const pcClass=pc>100?'high':pc>=85?'medium':'low';
-        const realClass=saldo<0?'bad':real>0?'ok':'';
-        return `
-          <td class="num month-detail prev" data-month="${m.key}">${brl(prev)}</td>
-          <td class="num month-detail real ${realClass}" data-month="${m.key}">${brl(real)}</td>
-          <td class="num month-detail saldo ${saldo<0?'negative':'positive'}" data-month="${m.key}">${brl(saldo)}</td>
-          <td class="num month-detail percent ${pcClass}" data-month="${m.key}">${pc===999?'Sem orç.':pc.toFixed(1)+'%'}</td>
-          <td class="month-summary-cell ${saldo<0?'saldo negative':'saldo positive'}" data-month-summary="${m.key}">${brl(saldo)}</td>`;
-      }).join('');
-      return `<tr data-account="${acc.code}">
-        <td class="account-cell"><span class="account-code">${acc.code}</span><span class="account-name">${acc.name||'—'}</span></td>
-        ${monthCells}
-        <td class="num prev"><strong>${brl(t.previsto)}</strong></td>
-        <td class="num real ${t.saldo<0?'bad':'ok'}"><strong>${brl(t.realizado)}</strong></td>
-        <td class="num saldo ${t.saldo<0?'negative':'positive'}"><strong>${brl(t.saldo)}</strong></td>
-        <td>${statusBadge(t.previsto,t.realizado)}</td>
-      </tr>`;
-    }).join('');
+
+    let bodyHtml = '';
+    const mostraGrupos = modo === 'por_empresa' || modo === 'por_centro';
+    const icone = modo === 'por_empresa' ? '🏢' : '📍';
+
+    grupos.forEach(g => {
+      if (mostraGrupos) bodyHtml += renderGroupHeader(g.label, icone);
+      bodyHtml += (g.contas || []).map(renderAccountRow).join('');
+      if (mostraGrupos && g.contas && g.contas.length) {
+        bodyHtml += renderSubtotalRow(g.label, g.contas, icone);
+      }
+    });
 
     const monthlyTotals=months.map((m,idx)=>{
       const prev=accounts.reduce((s,a)=>s+a.values[idx][0],0);
@@ -382,8 +432,11 @@
         <td class="month-summary-cell ${saldo<0?'saldo negative':'saldo positive'}" data-month-summary="${m.key}">${brl(saldo)}</td>`;
     }).join('');
     const gt=globalTotals();
-    tbody.innerHTML=accountRows+`<tr class="total-row">
-      <td class="account-cell"><span class="account-code">TOTAL</span><span class="account-name">${centroLabel}</span></td>
+    const totalLabel = modo === 'por_empresa' ? 'TODAS EMPRESAS'
+                     : modo === 'por_centro'  ? 'TODOS CENTROS'
+                     : centroLabel;
+    tbody.innerHTML=bodyHtml+`<tr class="total-row">
+      <td class="account-cell"><span class="account-code">TOTAL</span><span class="account-name">${totalLabel}</span></td>
       ${monthlyTotals}
       <td class="num prev">${brl(gt.previsto)}</td>
       <td class="num real ${gt.saldo<0?'bad':'ok'}">${brl(gt.realizado)}</td>

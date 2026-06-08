@@ -2508,8 +2508,11 @@ _DRE_DADOS_TTL_SEG = 300
 _dre_dados_cache = {}
 
 
-def _get_lista_cached(nome_cache, endpoint, headers, force_refresh=False):
-    """Retorna a lista auxiliar do cache, ou busca da API se expirado."""
+def _get_lista_cached(nome_cache, endpoint, headers, force_refresh=False, limit=1000):
+    """Retorna a lista auxiliar do cache, ou busca da API se expirado.
+
+    Paginação automática: percorre páginas até hasNext=false.
+    """
     import time
     entry = _listas_cache.get(nome_cache, {"data": None, "ts": 0})
     agora = time.time()
@@ -2521,15 +2524,24 @@ def _get_lista_cached(nome_cache, endpoint, headers, force_refresh=False):
 
     url = f"{get_dynamic_config('API_BASE_URL')}/cisspoder-service/{endpoint}"
     t0 = time.time()
+    all_data = []
     try:
-        resp = requests.post(url, json={"page": 1}, headers=headers, timeout=60)
+        page = 1
+        while True:
+            resp = requests.post(url, json={"page": page, "limit": limit}, headers=headers, timeout=60)
+            if resp.status_code != 200:
+                logger.warning(f"⚠️ {nome_cache}: API retornou {resp.status_code} na página {page}")
+                break
+            data = resp.json()
+            page_data = data.get("data", [])
+            all_data.extend(page_data)
+            if not data.get("hasNext", False):
+                break
+            page += 1
         elapsed = time.time() - t0
-        if resp.status_code == 200:
-            data = resp.json().get("data", [])
-            _listas_cache[nome_cache] = {"data": data, "ts": agora}
-            logger.info(f"🌐 {nome_cache}: cache MISS - API respondeu em {elapsed:.2f}s ({len(data)} itens)")
-            return data
-        logger.warning(f"⚠️ {nome_cache}: API retornou {resp.status_code} em {elapsed:.2f}s")
+        _listas_cache[nome_cache] = {"data": all_data, "ts": agora}
+        logger.info(f"🌐 {nome_cache}: cache MISS - API respondeu em {elapsed:.2f}s ({len(all_data)} itens)")
+        return all_data
     except Exception:
         logger.exception(f"❌ {nome_cache}: erro ao buscar (após {time.time() - t0:.2f}s)")
     return entry["data"] or []
@@ -2761,15 +2773,35 @@ def liberacoes_aprovar_view(request):
 
 @token_required
 def liberacoes_minhas_view(request):
-    """Tela 'Minhas Solicitações' (acesso por qualquer usuário logado)."""
+    """Tela 'Minhas Solicitações' (acesso por qualquer usuário logado).
+
+    Carrega dropdowns (empresas, centros, contas) para o formulário de nova
+    solicitação manual. Centros são filtrados pela permissão do usuário.
+    """
     from . import liberacoes_service
 
     username = request.session.get('username', '')
     minhas = liberacoes_service.listar_minhas(username)
+
+    # Listas para o modal de Nova Solicitação
+    headers = get_api_headers()
+    empresas = _get_lista_cached('empresas', 'cadastro_empresa', headers)
+    centros = _get_lista_cached('centros', 'cadastro_centroresultados', headers)
+    contas = _get_lista_cached('contas', 'cadastro_contabil', headers)
+
+    # Filtra centros conforme permissão do usuário (mesma regra do painel)
+    centros_permitidos_ids = get_centros_permitidos(username)
+    if centros_permitidos_ids:
+        centros = [c for c in centros if c.get('idcentroresultado')
+                   and int(c.get('idcentroresultado')) in centros_permitidos_ids]
+
     return render(request, 'liberacoes_minhas.html', {
         'minhas': minhas,
         'total': len(minhas),
         'username': username,
+        'empresas': empresas,
+        'centros': centros,
+        'contas': contas,
         'pode_gerenciar_usuarios': usuario_pode_gerenciar_usuarios(username),
         'tem_acesso_configuracao': usuario_tem_acesso_configuracao(username),
         'pode_aprovar_liberacao': usuario_pode_aprovar_liberacao(username),
@@ -2852,6 +2884,61 @@ def liberacao_count_ajax(request):
     if not usuario_pode_aprovar_liberacao(username):
         return JsonResponse({'count': 0})
     return JsonResponse({'count': liberacoes_service.count_pendentes()})
+
+
+@token_required
+def liberacao_criar_ajax(request):
+    """Endpoint AJAX para o usuário criar uma solicitação manual."""
+    from . import liberacoes_service
+
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'message': 'Método não permitido'}, status=405)
+
+    username = request.session.get('username', '')
+    if not username:
+        return JsonResponse({'success': False, 'message': 'Não autenticado'}, status=401)
+
+    try:
+        idempresa = int(request.POST.get('idempresa') or 0)
+        idcentro = int(request.POST.get('idcentroresultado') or 0)
+        idconta = int(request.POST.get('idctacontabil') or 0)
+        dtmov = (request.POST.get('dtmovimento') or '').strip()
+        valor_str = (request.POST.get('vallancamento') or '').strip().replace('.', '').replace(',', '.')
+        justificativa = (request.POST.get('justificativa') or '').strip()
+
+        if idempresa <= 0 or idcentro <= 0 or idconta <= 0:
+            return JsonResponse({'success': False, 'message': 'Empresa, Centro e Conta são obrigatórios'}, status=400)
+        if not dtmov:
+            return JsonResponse({'success': False, 'message': 'Data do lançamento é obrigatória'}, status=400)
+        if not valor_str:
+            return JsonResponse({'success': False, 'message': 'Valor é obrigatório'}, status=400)
+        if not justificativa:
+            return JsonResponse({'success': False, 'message': 'Justificativa é obrigatória'}, status=400)
+        valor = float(valor_str)
+        if valor <= 0:
+            return JsonResponse({'success': False, 'message': 'Valor deve ser maior que zero'}, status=400)
+
+        # Verifica permissão de centro (mesma regra do painel)
+        centros_permitidos = get_centros_permitidos(username)
+        if centros_permitidos and idcentro not in centros_permitidos:
+            return JsonResponse({'success': False, 'message': 'Sem permissão neste centro de resultado'}, status=403)
+
+        result = liberacoes_service.criar(
+            idempresa=idempresa,
+            idcentroresultado=idcentro,
+            idctacontabil=idconta,
+            dtmovimento=dtmov,
+            vallancamento=valor,
+            justificativa=justificativa,
+            idusuario=None,
+            userso=username,
+        )
+        return JsonResponse(result, status=200 if result['success'] else 400)
+    except ValueError as e:
+        return JsonResponse({'success': False, 'message': f'Dados inválidos: {e}'}, status=400)
+    except Exception as e:
+        logger.exception("❌ Erro ao criar solicitação manual")
+        return JsonResponse({'success': False, 'message': f'Erro interno: {e}'}, status=500)
 
 
 # ==================== PAINEL PRINCIPAL (LAYOUT NOVO) ====================

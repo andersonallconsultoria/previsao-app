@@ -117,7 +117,7 @@
               <td><span class="pill-origem">{{ s.origem|default:"-" }}</span></td>
               <td>
                 <button class="btn-aprovar" onclick='abrirModal({{ s.idsolicitacao }}, "A", {{ s.valorPrevisto|default:0 }}, {{ s.valorRealizado|default:0 }}, {{ s.vallancamento|default:0 }})'>✓ Aprovar</button>
-                <button class="btn-recusar" onclick='abrirModal({{ s.idsolicitacao }}, "R", 0, 0, 0)'>✗ Recusar</button>
+                <button class="btn-recusar" onclick='abrirModal({{ s.idsolicitacao }}, "R", {{ s.valorPrevisto|default:0 }}, {{ s.valorRealizado|default:0 }}, {{ s.vallancamento|default:0 }})'>✗ Recusar</button>
               </td>
             </tr>
             {% endfor %}

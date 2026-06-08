@@ -96,17 +96,48 @@ def decidir(idsolicitacao, decisao, tipo_liberacao, valor_extra, perc_extra,
         "P_OBSERVACAO":        observacao,
     }]
     resp = _post_endpoint("liberacao_decidir", payload, timeout=30)
+    return _parse_mensagem_ok_erro(resp)
+
+
+def criar(idempresa, idcentroresultado, idctacontabil, dtmovimento,
+          vallancamento, justificativa, idusuario, userso):
+    """Cria uma solicitação manual (antes do operador tentar lançar).
+
+    Args:
+        idempresa, idcentroresultado, idctacontabil: ints
+        dtmovimento: string 'YYYY-MM-DD'
+        vallancamento: float (valor positivo)
+        justificativa: string (obrigatória)
+        idusuario: int ou None (ID interno do CISS-Poder; pode ser None)
+        userso: string (username, ex: 'ANDERSON.SANTOS') — obrigatório
+
+    Returns:
+        dict {'success': bool, 'message': str}
+    """
+    payload = [{
+        "P_IDEMPRESA":         int(idempresa),
+        "P_IDCENTRORESULTADO": int(idcentroresultado),
+        "P_IDCTACONTABIL":     int(idctacontabil),
+        "P_DTMOVIMENTO":       dtmovimento,
+        "P_VALLANCAMENTO":     float(vallancamento),
+        "P_JUSTIFICATIVA":     justificativa,
+        "P_IDUSUARIO":         int(idusuario) if idusuario else None,
+        "P_USERSO":            userso,
+    }]
+    resp = _post_endpoint("liberacao_criar", payload, timeout=30)
+    return _parse_mensagem_ok_erro(resp)
+
+
+def _parse_mensagem_ok_erro(resp):
+    """Parser comum para functions que retornam MENSAGEM com prefixo OK:/ERRO:."""
     data = resp.get("data", [])
     if not data:
         return {"success": False, "message": resp.get("error") or "Resposta vazia do servidor"}
-
-    # A function retorna uma única coluna MENSAGEM com prefixo OK: ou ERRO:
     first = data[0]
     mensagem = (first.get("MENSAGEM") or first.get("mensagem") or "").strip()
     if not mensagem:
         return {"success": False, "message": "Sem mensagem na resposta"}
     upper = mensagem.upper()
     success = upper.startswith("OK")
-    # Remove o prefixo "OK:" ou "ERRO:" para mostrar apenas a mensagem na UI
     msg_limpa = mensagem.split(":", 1)[1].strip() if ":" in mensagem else mensagem
     return {"success": success, "message": msg_limpa}

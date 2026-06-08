@@ -36,6 +36,23 @@
     details{ margin-top:6px;}
     details summary{ cursor:pointer; color:#1a355c; font-weight:700; font-size:12px;}
     details .meta{ background:#f9fafb; padding:8px; border-radius:6px; margin-top:6px; font-size:12px; color:#374151;}
+
+    /* Modal de nova solicitação */
+    .modal-bg{ display:none; position:fixed; inset:0; background:rgba(11,27,42,.78); z-index:9998; align-items:center; justify-content:center;}
+    .modal-box{ background:#fff; border-radius:14px; padding:24px; max-width:580px; width:95%; box-shadow:0 20px 50px rgba(0,0,0,.3); max-height:90vh; overflow-y:auto;}
+    .modal-box h3{ margin:0 0 16px; font-size:20px; color:#0b1b2a;}
+    .form-row{ margin-bottom:14px;}
+    .form-row label{ display:block; font-weight:700; color:#374151; font-size:13px; margin-bottom:6px;}
+    .form-row input, .form-row select, .form-row textarea{ width:100%; border:1px solid #d1d5db; border-radius:8px; padding:10px; font-size:14px; box-sizing:border-box;}
+    .form-row textarea{ min-height:80px; resize:vertical; font-family:inherit;}
+    .form-row.two{ display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+    .modal-footer{ display:flex; gap:10px; justify-content:flex-end; margin-top:20px;}
+    .btn-cancelar{ background:#6b7280; color:#fff; border:0; padding:10px 16px; border-radius:8px; font-weight:700; cursor:pointer;}
+    .btn-confirmar{ background:#16a34a; color:#fff; border:0; padding:10px 16px; border-radius:8px; font-weight:700; cursor:pointer;}
+    .btn-confirmar:disabled{ opacity:.6; cursor:not-allowed;}
+    .toast-msg{ position:fixed; top:20px; right:20px; padding:12px 20px; border-radius:8px; color:#fff; font-weight:700; z-index:9999; display:none; box-shadow:0 4px 12px rgba(0,0,0,.2);}
+    .toast-msg.success{ background:#16a34a;}
+    .toast-msg.error{ background:#dc2626;}
   </style>
 </head>
 <body>
@@ -59,8 +76,9 @@
           <h2>{{ username }} — {{ total }} solicitação(ões)</h2>
           <small>Lista de todas as suas tentativas de lançamento que estouraram o previsto.</small>
         </div>
-        <div>
-          <button class="btn-coe primary" onclick="window.location.reload()">🔄 Atualizar</button>
+        <div style="display:flex; gap:8px;">
+          <button class="btn-coe primary" onclick="abrirModalCriar()">➕ Nova Solicitação</button>
+          <button class="btn-coe ghost" onclick="window.location.reload()">🔄 Atualizar</button>
         </div>
       </div>
 
@@ -135,6 +153,146 @@
     </div>
   </div>
 </div>
+
+<!-- Modal Nova Solicitação -->
+<div class="modal-bg" id="modalBg">
+  <div class="modal-box">
+    <h3>➕ Nova Solicitação de Liberação</h3>
+    <div style="background:#fff7ed; color:#92400e; padding:10px; border-radius:8px; font-size:12px; margin-bottom:14px;">
+      💡 Use esta tela para solicitar uma liberação <b>antes</b> de tentar o lançamento no ERP — útil quando você sabe que vai estourar o previsto.
+    </div>
+
+    <form id="formCriar" onsubmit="return false;">
+      {% csrf_token %}
+      <div class="form-row">
+        <label>Empresa *</label>
+        <select id="inEmpresa" required>
+          <option value="">— Selecione —</option>
+          {% for emp in empresas %}
+            <option value="{{ emp.idempresa }}">{{ emp.empresa }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="form-row">
+        <label>Centro de Resultado *</label>
+        <select id="inCentro" required>
+          <option value="">— Selecione —</option>
+          {% for c in centros %}
+            <option value="{{ c.idcentroresultado }}">{{ c.centroresultados|default:c.descrcentroresultado }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="form-row">
+        <label>Conta Contábil *</label>
+        <select id="inConta" required>
+          <option value="">— Selecione —</option>
+          {% for ct in contas %}
+            <option value="{{ ct.idctacontabil }}">{{ ct.contabil|default:ct.descrctacontabil }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="form-row two">
+        <div>
+          <label>Data do Lançamento *</label>
+          <input type="date" id="inData" required>
+        </div>
+        <div>
+          <label>Valor (R$) *</label>
+          <input type="text" inputmode="decimal" id="inValor" placeholder="Ex: 1500,00" required>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <label>Justificativa *</label>
+        <textarea id="inJustificativa" placeholder="Descreva o motivo da solicitação" required></textarea>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn-cancelar" onclick="fecharModalCriar()">Cancelar</button>
+        <button type="button" class="btn-confirmar" id="btnEnviar" onclick="enviarCriar()">Enviar Solicitação</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="toast-msg" id="toast"></div>
+
+<script>
+const CSRF_TOKEN_CRIAR = '{{ csrf_token }}';
+
+function abrirModalCriar(){
+  // Default data = hoje
+  const hoje = new Date().toISOString().slice(0, 10);
+  document.getElementById('inData').value = hoje;
+  document.getElementById('inEmpresa').value = '';
+  document.getElementById('inCentro').value = '';
+  document.getElementById('inConta').value = '';
+  document.getElementById('inValor').value = '';
+  document.getElementById('inJustificativa').value = '';
+  document.getElementById('modalBg').style.display = 'flex';
+}
+
+function fecharModalCriar(){
+  document.getElementById('modalBg').style.display = 'none';
+}
+
+function showToast(msg, ok){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast-msg ' + (ok ? 'success' : 'error');
+  t.style.display = 'block';
+  setTimeout(() => t.style.display = 'none', 5000);
+}
+
+async function enviarCriar(){
+  const idempresa = document.getElementById('inEmpresa').value;
+  const idcentro = document.getElementById('inCentro').value;
+  const idconta = document.getElementById('inConta').value;
+  const dtmov = document.getElementById('inData').value;
+  const valor = document.getElementById('inValor').value.trim();
+  const justificativa = document.getElementById('inJustificativa').value.trim();
+
+  if (!idempresa || !idcentro || !idconta || !dtmov || !valor || !justificativa){
+    showToast('Preencha todos os campos obrigatórios', false);
+    return;
+  }
+
+  const fd = new FormData();
+  fd.append('idempresa', idempresa);
+  fd.append('idcentroresultado', idcentro);
+  fd.append('idctacontabil', idconta);
+  fd.append('dtmovimento', dtmov);
+  fd.append('vallancamento', valor);
+  fd.append('justificativa', justificativa);
+
+  const btn = document.getElementById('btnEnviar');
+  btn.disabled = true;
+  btn.textContent = 'Enviando...';
+  try {
+    const resp = await fetch('{% url "liberacao_criar" %}', {
+      method: 'POST',
+      headers: {'X-CSRFToken': CSRF_TOKEN_CRIAR, 'X-Requested-With': 'XMLHttpRequest'},
+      body: fd,
+    });
+    const data = await resp.json();
+    if (data.success){
+      showToast(data.message || 'Solicitação criada', true);
+      fecharModalCriar();
+      setTimeout(() => window.location.reload(), 800);
+    } else {
+      showToast(data.message || 'Erro', false);
+    }
+  } catch(e){
+    showToast('Erro de rede: ' + e.message, false);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Enviar Solicitação';
+  }
+}
+</script>
 
 </body>
 </html>

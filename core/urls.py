@@ -28,5 +28,6 @@ urlpatterns = [
     path('liberacoes/minhas/', views.liberacoes_minhas_view, name='liberacoes_minhas'),
     path('liberacoes/decidir/', views.liberacao_decidir_ajax, name='liberacao_decidir'),
     path('liberacoes/count/', views.liberacao_count_ajax, name='liberacao_count'),
+    path('liberacoes/criar/', views.liberacao_criar_ajax, name='liberacao_criar'),
 
 ]

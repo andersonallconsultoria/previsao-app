@@ -3012,6 +3012,7 @@ def painel_view(request):
     deve_consultar = request.GET.get('pesquisar') == '1'
 
     if not sem_centros_permitidos and deve_consultar:
+        import time as _t
         consultou = True
         payload = {
             "page": 1, "limit": 1000,
@@ -3025,22 +3026,33 @@ def painel_view(request):
         }
         url = f"{get_dynamic_config('API_BASE_URL')}/cisspoder-service/centro_resultado_bi"
         dados = []
+        t_total_api = 0.0
+        npages = 0
+        logger.info(f"🔍 painel: iniciando consulta centro_resultado_bi (empresa={empresa or 'TODAS'}, centro={centro or 'TODOS'}, ano={ano})")
         try:
             page = 1
             while True:
                 payload["page"] = page
+                t0 = _t.time()
                 resp = requests.post(url, json=payload, headers=headers, timeout=120)
+                t_page = _t.time() - t0
+                t_total_api += t_page
+                npages += 1
                 if resp.status_code != 200:
                     erro_api = f"HTTP {resp.status_code}"
+                    logger.warning(f"⚠️ painel: pagina {page} retornou HTTP {resp.status_code} em {t_page:.2f}s")
                     break
                 r = resp.json()
-                dados.extend(r.get("data", []))
+                page_data = r.get("data", [])
+                logger.info(f"   pagina {page}: {len(page_data)} itens em {t_page:.2f}s (hasNext={r.get('hasNext', False)})")
+                dados.extend(page_data)
                 if not r.get("hasNext", False):
                     break
                 page += 1
         except Exception as e:
             erro_api = str(e)
             logger.exception("❌ Painel v2 - erro centro_resultado_bi")
+        logger.info(f"✅ painel: {npages} pagina(s), {len(dados)} registros, API total {t_total_api:.2f}s")
 
         # Decide o modo de agrupamento conforme filtros aplicados
         if not centro and not empresa:
@@ -3050,6 +3062,7 @@ def painel_view(request):
         else:
             modo = "por_conta"
 
+        t_agrup = _t.time()
         from collections import defaultdict
         # Estrutura: grupo_label -> conta_key -> mes -> {prev, real}
         agrup_grupos = defaultdict(lambda: defaultdict(lambda: {f"{m:02d}": {"previsto": 0.0, "realizado": 0.0} for m in range(1, 13)}))
@@ -3097,6 +3110,8 @@ def painel_view(request):
             grupos_list.append({"label": grupo_label, "contas": contas_grupo})
 
         payload_dados = {"modo": modo, "grupos": grupos_list}
+        n_contas = sum(len(g.get('contas', [])) for g in grupos_list)
+        logger.info(f"✅ painel: agrupamento '{modo}' em {_t.time()-t_agrup:.2f}s -> {len(grupos_list)} grupos, {n_contas} contas")
 
     context = {
         'empresas': empresas,

@@ -207,7 +207,8 @@ def painel_legado_view(request):
     centros_permitidos_ids = get_centros_permitidos(username)
     sem_centros_permitidos = False
     mensagem_bloqueio = None
-    tem_lista_permitida = bool(centros_permitidos_ids)
+    # None = admin (vê tudo); [] = bloqueado; [...] = filtra
+    tem_lista_permitida = isinstance(centros_permitidos_ids, list) and len(centros_permitidos_ids) > 0
 
     ano_atual = datetime.now().year
 
@@ -227,7 +228,11 @@ def painel_legado_view(request):
     centros = post_api('cadastro_centroresultados')
     centro_preselect_id = None
     # Filtrar centros conforme permissões do usuário
-    if centros_permitidos_ids:
+    # centros_permitidos_ids: None = admin (vê tudo), [] = bloqueado, [...] = filtra
+    if centros_permitidos_ids is None:
+        # Admin: vê todos sem filtro
+        pass
+    elif centros_permitidos_ids:
         centros = [
             c for c in centros
             if str(c.get('idcentroresultado')) and int(c.get('idcentroresultado')) in centros_permitidos_ids
@@ -238,7 +243,7 @@ def painel_legado_view(request):
             except Exception:
                 centro_preselect_id = None
     else:
-        # Opção B: bloquear acesso se não houver centros vinculados
+        # Sem permissão: bloqueia acesso
         sem_centros_permitidos = True
         mensagem_bloqueio = "Usuário não tem centro de resultados relacionado. Contate o administrador."
         centros = []
@@ -293,7 +298,7 @@ def painel_legado_view(request):
                 'tem_lista_permitida': tem_lista_permitida,
             })
 
-        if centro and centros_permitidos_ids and int(centro) not in centros_permitidos_ids:
+        if centro and tem_lista_permitida and int(centro) not in centros_permitidos_ids:
             mensagem_bloqueio = "Você não tem permissão para acessar este centro de resultado."
             return render(request, 'painel_legado.html', {
                 'empresas': empresas,
@@ -1250,13 +1255,24 @@ def usuario_pode_aprovar_liberacao(username):
     return username.upper() in aprovadores
 
 def get_centros_permitidos(username):
-    """Retorna lista de IDs de centros permitidos para o usuário"""
+    """Retorna a lista de centros permitidos para o usuário.
+
+    Convenção:
+      - None     -> usuário é admin (sem restrição, vê TODOS os centros)
+      - []       -> usuário não tem vínculo nem é admin (bloqueado)
+      - [int, ...] -> lista específica de IDs permitidos
+    """
     if not username:
         return []
     config_data = get_usuarios_config()
+
+    # Admin (usuarios_admin) vê tudo sem restrição
+    usuarios_admin = [u.upper() for u in config_data.get('usuarios_admin', [])]
+    if username.upper() in usuarios_admin:
+        return None
+
     mapping = config_data.get('usuarios_centros', {}) or {}
     centros = mapping.get(username.upper(), [])
-    # Garantir ints
     centros_int = []
     for c in centros:
         try:
@@ -1275,24 +1291,15 @@ def configuracao_usuarios_view(request):
     if not usuario_pode_gerenciar_usuarios(username):
         return redirect('painel')
     
-    # Buscar centros de resultados para permitir vinculação
-    centros = []
-    centros_map = {}
+    # Buscar centros de resultados para permitir vinculação (usa cache em memória — 1h)
     headers = get_api_headers()
-    try:
-        url = f"{get_dynamic_config('API_BASE_URL')}/cisspoder-service/cadastro_centroresultados"
-        resp = requests.post(url, json={"limit": 1000, "page": 1}, headers=headers, timeout=10)
-        if resp.status_code == 200:
-            centros = resp.json().get("data", [])
-            for c in centros:
-                try:
-                    centros_map[int(c.get("idcentroresultado"))] = c.get("centroresultados")
-                except Exception:
-                    continue
-        else:
-            logger.warning(f"⚠️ cadastro_centroresultados retornou {resp.status_code}")
-    except Exception:
-        logger.exception("❌ Erro ao buscar centros de resultados para configuração de usuários")
+    centros = _get_lista_cached('centros', 'cadastro_centroresultados', headers)
+    centros_map = {}
+    for c in centros:
+        try:
+            centros_map[int(c.get("idcentroresultado"))] = c.get("centroresultados")
+        except Exception:
+            continue
     
     config_data = get_usuarios_config()
     usuarios_admin = config_data.get('usuarios_admin', [])
@@ -1528,8 +1535,8 @@ def exportar_excel_view(request):
     centros_lista = post_api('cadastro_centroresultados')
     empresas_lista = post_api('cadastro_empresa')
     
-    # Filtrar centros conforme permissões
-    if centros_permitidos_ids:
+    # Filtrar centros conforme permissões (admin vê tudo)
+    if isinstance(centros_permitidos_ids, list) and centros_permitidos_ids:
         centros_lista = [
             c for c in centros_lista
             if str(c.get('idcentroresultado')) and int(c.get('idcentroresultado')) in centros_permitidos_ids
@@ -1557,8 +1564,8 @@ def exportar_excel_view(request):
         except (ValueError, TypeError):
             pass
     
-    # Validar permissões de centro
-    if centro and centros_permitidos_ids and int(centro) not in centros_permitidos_ids:
+    # Validar permissões de centro (admin: pula)
+    if centro and isinstance(centros_permitidos_ids, list) and centros_permitidos_ids and int(centro) not in centros_permitidos_ids:
         return HttpResponse("Você não tem permissão para acessar este centro de resultado.", status=403)
     
     # Tentar usar dados da sessão (já consultados e processados)
@@ -2560,7 +2567,8 @@ def dre_view(request):
 
     username = request.session.get('username', '')
     centros_permitidos_ids = get_centros_permitidos(username)
-    tem_lista_permitida = bool(centros_permitidos_ids)
+    # None = admin (vê tudo); [] = bloqueado; [...] = filtra
+    tem_lista_permitida = isinstance(centros_permitidos_ids, list) and len(centros_permitidos_ids) > 0
 
     headers = get_api_headers()
 
@@ -2789,9 +2797,9 @@ def liberacoes_minhas_view(request):
     centros = _get_lista_cached('centros', 'cadastro_centroresultados', headers)
     contas = _get_lista_cached('contas', 'cadastro_contabil', headers)
 
-    # Filtra centros conforme permissão do usuário (mesma regra do painel)
+    # Filtra centros conforme permissão (admin vê tudo)
     centros_permitidos_ids = get_centros_permitidos(username)
-    if centros_permitidos_ids:
+    if isinstance(centros_permitidos_ids, list) and centros_permitidos_ids:
         centros = [c for c in centros if c.get('idcentroresultado')
                    and int(c.get('idcentroresultado')) in centros_permitidos_ids]
 
@@ -2918,9 +2926,9 @@ def liberacao_criar_ajax(request):
         if valor <= 0:
             return JsonResponse({'success': False, 'message': 'Valor deve ser maior que zero'}, status=400)
 
-        # Verifica permissão de centro (mesma regra do painel)
+        # Verifica permissão de centro (admin: pula)
         centros_permitidos = get_centros_permitidos(username)
-        if centros_permitidos and idcentro not in centros_permitidos:
+        if isinstance(centros_permitidos, list) and centros_permitidos and idcentro not in centros_permitidos:
             return JsonResponse({'success': False, 'message': 'Sem permissão neste centro de resultado'}, status=403)
 
         result = liberacoes_service.criar(
@@ -2955,31 +2963,22 @@ def painel_view(request):
     headers = get_api_headers()
     username = request.session.get('username', '')
     centros_permitidos_ids = get_centros_permitidos(username)
-    tem_lista_permitida = bool(centros_permitidos_ids)
+    # None = admin (vê tudo); [] = bloqueado; [...] = filtra
+    eh_admin = centros_permitidos_ids is None
+    tem_lista_permitida = isinstance(centros_permitidos_ids, list) and len(centros_permitidos_ids) > 0
 
     ano_atual = datetime.now().year
     ano = int(request.GET.get('ano') or request.POST.get('ano') or ano_atual)
     empresa = request.GET.get('empresa') or request.POST.get('empresa') or ''
     centro = request.GET.get('centro') or request.POST.get('centro') or ''
 
-    # Listas auxiliares
-    def post_api(endpoint):
-        url = f"{get_dynamic_config('API_BASE_URL')}/cisspoder-service/{endpoint}"
-        try:
-            resp = requests.post(url, json={"page": 1}, headers=headers, timeout=60)
-            if resp.status_code == 200:
-                return resp.json().get("data", [])
-        except Exception:
-            logger.exception(f"❌ Erro ao buscar {endpoint}")
-        return []
-
     empresas = _get_lista_cached('empresas', 'cadastro_empresa', headers)
     centros = _get_lista_cached('centros', 'cadastro_centroresultados', headers)
 
-    # Filtrar centros conforme permissões
+    # Filtrar centros conforme permissões (admins veem tudo)
     if tem_lista_permitida:
         centros = [c for c in centros if c.get('idcentroresultado') and int(c.get('idcentroresultado')) in centros_permitidos_ids]
-    sem_centros_permitidos = tem_lista_permitida and not centros
+    sem_centros_permitidos = (not eh_admin) and tem_lista_permitida is False  # só bloqueia se NÃO admin E sem lista
 
     # Se só tem 1 centro permitido, pré-seleciona
     centro_preselect_id = None

@@ -83,6 +83,27 @@ def log_json_pretty(obj, title=None):
 _service_token_cache = {"token": None, "ts": 0}
 _SERVICE_TOKEN_TTL_SEG = 3500  # ~58 min (OAuth normalmente expira em 1h)
 
+# Cache em memória para resultados pesados do painel (consulta centro_resultado_bi).
+# Chave: f"painel:{empresa}:{centro}:{ano}" — TTL de 10 minutos.
+_painel_cache = {}
+_PAINEL_CACHE_TTL_SEG = 600  # 10 min
+
+def _painel_cache_get(key):
+    import time as _t
+    entry = _painel_cache.get(key)
+    if entry and (_t.time() - entry['ts']) < _PAINEL_CACHE_TTL_SEG:
+        return entry['data']
+    return None
+
+def _painel_cache_set(key, data):
+    import time as _t
+    _painel_cache[key] = {'data': data, 'ts': _t.time()}
+    # Limita a 50 entradas pra não crescer infinito
+    if len(_painel_cache) > 50:
+        oldest = sorted(_painel_cache.items(), key=lambda kv: kv[1]['ts'])[:10]
+        for k, _ in oldest:
+            _painel_cache.pop(k, None)
+
 
 def get_service_token(force_refresh=False):
     """Retorna um Bearer token válido para chamar a API CISS-Poder.
@@ -3013,46 +3034,87 @@ def painel_view(request):
 
     if not sem_centros_permitidos and deve_consultar:
         import time as _t
+        from concurrent.futures import ThreadPoolExecutor
         consultou = True
-        payload = {
-            "page": 1, "limit": 1000,
-            "clausulas": [
-                {"campo": "anoreferencia", "operadorlogico": "AND", "operador": "IGUAL", "valor": ano},
-                {"campo": "idempfiltro", "operadorlogico": "AND", "operador": "IGUAL",
-                 "valor": int(empresa) if empresa else None},
-                {"campo": "idcentroresultadofiltro", "operadorlogico": "AND", "operador": "IGUAL",
-                 "valor": int(centro) if centro else None},
-            ],
-        }
-        url = f"{get_dynamic_config('API_BASE_URL')}/cisspoder-service/centro_resultado_bi"
-        dados = []
-        t_total_api = 0.0
-        npages = 0
-        logger.info(f"🔍 painel: iniciando consulta centro_resultado_bi (empresa={empresa or 'TODAS'}, centro={centro or 'TODOS'}, ano={ano})")
-        try:
-            page = 1
-            while True:
-                payload["page"] = page
+
+        cache_key = f"painel:{empresa or 'X'}:{centro or 'X'}:{ano}"
+        cached = _painel_cache_get(cache_key)
+        if cached is not None:
+            logger.info(f"📦 painel: cache HIT ({cache_key}) - {len(cached)} registros")
+            dados = cached
+        else:
+            payload_base = {
+                "limit": 1000,
+                "clausulas": [
+                    {"campo": "anoreferencia", "operadorlogico": "AND", "operador": "IGUAL", "valor": ano},
+                    {"campo": "idempfiltro", "operadorlogico": "AND", "operador": "IGUAL",
+                     "valor": int(empresa) if empresa else None},
+                    {"campo": "idcentroresultadofiltro", "operadorlogico": "AND", "operador": "IGUAL",
+                     "valor": int(centro) if centro else None},
+                ],
+            }
+            url = f"{get_dynamic_config('API_BASE_URL')}/cisspoder-service/centro_resultado_bi"
+            logger.info(f"🔍 painel: cache MISS, iniciando consulta (empresa={empresa or 'TODAS'}, centro={centro or 'TODOS'}, ano={ano})")
+            dados = []
+
+            def fetch_page(page_num):
+                p = dict(payload_base)
+                p["page"] = page_num
                 t0 = _t.time()
-                resp = requests.post(url, json=payload, headers=headers, timeout=120)
-                t_page = _t.time() - t0
-                t_total_api += t_page
-                npages += 1
-                if resp.status_code != 200:
-                    erro_api = f"HTTP {resp.status_code}"
-                    logger.warning(f"⚠️ painel: pagina {page} retornou HTTP {resp.status_code} em {t_page:.2f}s")
-                    break
-                r = resp.json()
-                page_data = r.get("data", [])
-                logger.info(f"   pagina {page}: {len(page_data)} itens em {t_page:.2f}s (hasNext={r.get('hasNext', False)})")
-                dados.extend(page_data)
-                if not r.get("hasNext", False):
-                    break
-                page += 1
-        except Exception as e:
-            erro_api = str(e)
-            logger.exception("❌ Painel v2 - erro centro_resultado_bi")
-        logger.info(f"✅ painel: {npages} pagina(s), {len(dados)} registros, API total {t_total_api:.2f}s")
+                try:
+                    resp = requests.post(url, json=p, headers=headers, timeout=180)
+                    elapsed = _t.time() - t0
+                    if resp.status_code != 200:
+                        return page_num, elapsed, [], False, f"HTTP {resp.status_code}"
+                    r = resp.json()
+                    return page_num, elapsed, r.get("data", []), r.get("hasNext", False), None
+                except Exception as e:
+                    return page_num, _t.time() - t0, [], False, str(e)
+
+            t_start = _t.time()
+            try:
+                # Página 1 primeiro pra descobrir se tem mais
+                _, elapsed1, page1_data, has_next, err = fetch_page(1)
+                logger.info(f"   pagina 1: {len(page1_data)} itens em {elapsed1:.2f}s (hasNext={has_next})")
+                if err:
+                    erro_api = err
+                dados.extend(page1_data)
+
+                # Se tem mais, busca em paralelo as próximas páginas (até 8 simultâneas)
+                if has_next and not err:
+                    # Lote 1: páginas 2-9 em paralelo
+                    lote_inicio = 2
+                    has_more = True
+                    while has_more and not erro_api:
+                        lote_fim = lote_inicio + 7  # 8 páginas por lote
+                        with ThreadPoolExecutor(max_workers=8) as ex:
+                            futures = [ex.submit(fetch_page, p) for p in range(lote_inicio, lote_fim + 1)]
+                            resultados = sorted([f.result() for f in futures], key=lambda x: x[0])
+
+                        has_more = False
+                        for page_num, elapsed, page_data, hn, err in resultados:
+                            logger.info(f"   pagina {page_num} (paralela): {len(page_data)} itens em {elapsed:.2f}s (hasNext={hn})")
+                            if err:
+                                erro_api = err
+                                break
+                            dados.extend(page_data)
+                            # Se a última página do lote ainda tem next, continua
+                            if page_num == lote_fim and hn:
+                                has_more = True
+                        lote_inicio = lote_fim + 1
+                        # Proteção: para se passar de 40 páginas
+                        if lote_inicio > 40:
+                            logger.warning("⚠️ painel: parou em 40 paginas (limite de seguranca)")
+                            break
+            except Exception as e:
+                erro_api = str(e)
+                logger.exception("❌ Painel - erro paralelo centro_resultado_bi")
+
+            t_total = _t.time() - t_start
+            logger.info(f"✅ painel: {len(dados)} registros em {t_total:.2f}s (paralelo)")
+
+            if not erro_api and dados:
+                _painel_cache_set(cache_key, dados)
 
         # Decide o modo de agrupamento conforme filtros aplicados
         if not centro and not empresa:

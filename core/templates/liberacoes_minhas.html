@@ -96,6 +96,7 @@
               <th class="num">Valor lançamento</th>
               <th>Tentativas</th>
               <th>Origem</th>
+              <th>💬 Observações</th>
               <th>Decisão</th>
             </tr>
           </thead>
@@ -125,16 +126,33 @@
               <td class="num">{{ s.vallancamento|floatformat:2 }}</td>
               <td>{{ s.numTentativas|default:1 }}</td>
               <td><span class="pill-origem">{{ s.origem|default:"-" }}</span></td>
+              <td style="max-width:280px;">
+                {% if s.justificativa %}
+                  <div style="background:#fef9c3; border-left:3px solid #ca8a04; padding:6px 8px; border-radius:4px; font-size:12px; color:#713f12; margin-bottom:4px;">
+                    <b style="font-size:10px; text-transform:uppercase; color:#92400e;">📝 Sua justificativa</b><br>
+                    {{ s.justificativa }}
+                  </div>
+                {% else %}
+                  <div style="font-size:11px; color:#9ca3af; margin-bottom:4px;">📝 Sem justificativa</div>
+                {% endif %}
+                {% if s.observacao %}
+                  <div style="background:#dbeafe; border-left:3px solid #1e40af; padding:6px 8px; border-radius:4px; font-size:12px; color:#1e3a8a;">
+                    <b style="font-size:10px; text-transform:uppercase; color:#1e40af;">💬 Aprovador</b><br>
+                    {{ s.observacao }}
+                  </div>
+                {% elif s.flagStatus != 'P' %}
+                  <div style="font-size:11px; color:#9ca3af;">💬 Sem observação</div>
+                {% endif %}
+              </td>
               <td>
                 {% if s.usuarioAprovador %}
-                  <details>
-                    <summary>Por {{ s.usuarioAprovador }}</summary>
-                    <div class="meta">
-                      <div><b>Quando:</b> {{ s.dtDecisao|default:"-" }}</div>
-                      <div><b>Tipo:</b> {{ s.tipoLiberacao|default:"-" }}</div>
-                      <div><b>Observação:</b> {{ s.observacao|default:"(vazia)" }}</div>
-                    </div>
-                  </details>
+                  <div style="font-weight:700; font-size:12px;">
+                    {% if s.tipoLiberacao == 'U' %}🔒 One-shot
+                    {% elif s.tipoLiberacao == 'V' %}💰 R$ {{ s.valorLibExtra|floatformat:2 }}
+                    {% elif s.tipoLiberacao == 'P' %}📊 {{ s.percLibExtra|floatformat:1 }}%
+                    {% else %}{{ s.tipoLiberacao|default:"-" }}{% endif %}
+                  </div>
+                  <small style="color:#64748b;">por {{ s.usuarioAprovador }}<br>em {{ s.dtDecisao|default:"-" }}</small>
                 {% else %}
                   <span style="color:#9ca3af;">aguardando</span>
                 {% endif %}

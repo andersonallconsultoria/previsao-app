@@ -179,7 +179,7 @@
         <select id="inCentro" required>
           <option value="">— Selecione —</option>
           {% for c in centros %}
-            <option value="{{ c.idcentroresultado }}">{{ c.centroresultados|default:c.descrcentroresultado }}</option>
+            <option value="{{ c.idcentroresultado }}">{{ c.centroresultados }}</option>
           {% endfor %}
         </select>
       </div>
@@ -189,7 +189,7 @@
         <select id="inConta" required>
           <option value="">— Selecione —</option>
           {% for ct in contas %}
-            <option value="{{ ct.idctacontabil }}">{{ ct.contabil|default:ct.descrctacontabil }}</option>
+            <option value="{{ ct.idctacontabil }}">{{ ct.contabil }}</option>
           {% endfor %}
         </select>
       </div>

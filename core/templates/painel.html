@@ -161,6 +161,7 @@
   </header>
 
   <form method="get" id="filtersForm" action="{% url 'painel' %}">
+    <input type="hidden" name="pesquisar" value="1">
     <section class="filters" aria-label="Filtros do COE">
       <div class="field">
         <label for="empresa">Empresa</label>

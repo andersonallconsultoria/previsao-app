@@ -3007,7 +3007,11 @@ def painel_view(request):
     consultou = False
     payload_dados = {"modo": "por_conta", "grupos": []}
 
-    if not sem_centros_permitidos:
+    # Só consulta se o usuário clicou explicitamente em "Pesquisar"
+    # (formulário envia ?pesquisar=1). Carregamento inicial não dispara consulta.
+    deve_consultar = request.GET.get('pesquisar') == '1'
+
+    if not sem_centros_permitidos and deve_consultar:
         consultou = True
         payload = {
             "page": 1, "limit": 1000,

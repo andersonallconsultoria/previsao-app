@@ -3082,12 +3082,12 @@ def painel_view(request):
 
                 # Se tem mais, busca em paralelo as próximas páginas (até 8 simultâneas)
                 if has_next and not err:
-                    # Lote 1: páginas 2-9 em paralelo
+                    # Lotes de 4 páginas em paralelo (seguro pra EC2 com 1 GB RAM)
                     lote_inicio = 2
                     has_more = True
                     while has_more and not erro_api:
-                        lote_fim = lote_inicio + 7  # 8 páginas por lote
-                        with ThreadPoolExecutor(max_workers=8) as ex:
+                        lote_fim = lote_inicio + 3  # 4 páginas por lote
+                        with ThreadPoolExecutor(max_workers=4) as ex:
                             futures = [ex.submit(fetch_page, p) for p in range(lote_inicio, lote_fim + 1)]
                             resultados = sorted([f.result() for f in futures], key=lambda x: x[0])
 

@@ -90,7 +90,7 @@
               <th>#</th>
               <th>Status</th>
               <th>Empresa / Centro / Conta</th>
-              <th>Data</th>
+              <th>Mês/Ano</th>
               <th class="num">Previsto</th>
               <th class="num">Realizado</th>
               <th class="num">Valor lançamento</th>
@@ -119,7 +119,7 @@
                 CR: <b>{{ s.idcentroresultado }}</b><br>
                 Cta: <b>{{ s.idctacontabil }}</b>
               </td>
-              <td>{{ s.dtmovimento|default:"-" }}</td>
+              <td>{% if s.dtmovimento %}{{ s.dtmovimento|slice:"5:7" }}/{{ s.dtmovimento|slice:":4" }}{% else %}-{% endif %}</td>
               <td class="num">{{ s.valorPrevisto|floatformat:2 }}</td>
               <td class="num">{{ s.valorRealizado|floatformat:2 }}</td>
               <td class="num">{{ s.vallancamento|floatformat:2 }}</td>
@@ -196,13 +196,42 @@
 
       <div class="form-row two">
         <div>
-          <label>Data do Lançamento *</label>
-          <input type="date" id="inData" required>
+          <label>Mês de Competência *</label>
+          <select id="inMes" required>
+            <option value="">— Selecione —</option>
+            <option value="01">Janeiro</option>
+            <option value="02">Fevereiro</option>
+            <option value="03">Março</option>
+            <option value="04">Abril</option>
+            <option value="05">Maio</option>
+            <option value="06">Junho</option>
+            <option value="07">Julho</option>
+            <option value="08">Agosto</option>
+            <option value="09">Setembro</option>
+            <option value="10">Outubro</option>
+            <option value="11">Novembro</option>
+            <option value="12">Dezembro</option>
+          </select>
         </div>
         <div>
-          <label>Valor (R$) *</label>
-          <input type="text" inputmode="decimal" id="inValor" placeholder="Ex: 1500,00" required>
+          <label>Ano *</label>
+          <select id="inAno" required>
+            <option value="2024">2024</option>
+            <option value="2025">2025</option>
+            <option value="2026">2026</option>
+            <option value="2027">2027</option>
+            <option value="2028">2028</option>
+          </select>
         </div>
+      </div>
+
+      <div class="form-row">
+        <label>Valor (R$) *</label>
+        <input type="text" inputmode="decimal" id="inValor" placeholder="Ex: 1500,00" required>
+      </div>
+
+      <div style="background:#eff6ff; color:#1e40af; padding:10px; border-radius:8px; font-size:12px; margin-bottom:14px; border:1px solid #bfdbfe;">
+        ℹ️ A liberação aprovada como <b>Valor extra</b> ou <b>Percentual</b> valerá para qualquer lançamento dentro do mês/ano indicado. Tipo <b>One-shot</b> exige valor exato.
       </div>
 
       <div class="form-row">
@@ -224,9 +253,12 @@
 const CSRF_TOKEN_CRIAR = '{{ csrf_token }}';
 
 function abrirModalCriar(){
-  // Default data = hoje
-  const hoje = new Date().toISOString().slice(0, 10);
-  document.getElementById('inData').value = hoje;
+  // Default mês/ano = mês corrente
+  const hoje = new Date();
+  const mesAtual = String(hoje.getMonth() + 1).padStart(2, '0');
+  const anoAtual = String(hoje.getFullYear());
+  document.getElementById('inMes').value = mesAtual;
+  document.getElementById('inAno').value = anoAtual;
   document.getElementById('inEmpresa').value = '';
   document.getElementById('inCentro').value = '';
   document.getElementById('inConta').value = '';
@@ -251,14 +283,17 @@ async function enviarCriar(){
   const idempresa = document.getElementById('inEmpresa').value;
   const idcentro = document.getElementById('inCentro').value;
   const idconta = document.getElementById('inConta').value;
-  const dtmov = document.getElementById('inData').value;
+  const mes = document.getElementById('inMes').value;
+  const ano = document.getElementById('inAno').value;
   const valor = document.getElementById('inValor').value.trim();
   const justificativa = document.getElementById('inJustificativa').value.trim();
 
-  if (!idempresa || !idcentro || !idconta || !dtmov || !valor || !justificativa){
+  if (!idempresa || !idcentro || !idconta || !mes || !ano || !valor || !justificativa){
     showToast('Preencha todos os campos obrigatórios', false);
     return;
   }
+  // Mês/Ano viram primeiro dia do mês (a trigger só usa MONTH/YEAR)
+  const dtmov = `${ano}-${mes}-01`;
 
   const fd = new FormData();
   fd.append('idempresa', idempresa);

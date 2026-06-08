@@ -88,7 +88,7 @@
               <th>#</th>
               <th>Solicitante</th>
               <th>Empresa / Centro / Conta</th>
-              <th>Data</th>
+              <th>Mês/Ano</th>
               <th class="num">Previsto</th>
               <th class="num">Realizado</th>
               <th class="num">Excedente</th>
@@ -108,7 +108,7 @@
                 CR: <b>{{ s.idcentroresultado }}</b><br>
                 Cta: <b>{{ s.idctacontabil }}</b>
               </td>
-              <td>{{ s.dtmovimento|default:"-" }}</td>
+              <td>{% if s.dtmovimento %}{{ s.dtmovimento|slice:"5:7" }}/{{ s.dtmovimento|slice:":4" }}{% else %}-{% endif %}</td>
               <td class="num">{{ s.valorPrevisto|floatformat:2 }}</td>
               <td class="num">{{ s.valorRealizado|floatformat:2 }}</td>
               <td class="num"><b style="color:#dc2626;">{{ s.valorExcedente|floatformat:2 }}</b></td>

@@ -3080,31 +3080,40 @@ def painel_view(request):
                     erro_api = err
                 dados.extend(page1_data)
 
-                # Se tem mais, busca em paralelo as próximas páginas (até 8 simultâneas)
-                if has_next and not err:
+                # Se tem mais, busca em paralelo as próximas páginas
+                if has_next:
                     # Lotes de 4 páginas em paralelo (seguro pra EC2 com 1 GB RAM)
                     lote_inicio = 2
                     has_more = True
-                    while has_more and not erro_api:
+                    paginas_com_erro = 0
+                    while has_more:
                         lote_fim = lote_inicio + 3  # 4 páginas por lote
                         with ThreadPoolExecutor(max_workers=4) as ex:
                             futures = [ex.submit(fetch_page, p) for p in range(lote_inicio, lote_fim + 1)]
                             resultados = sorted([f.result() for f in futures], key=lambda x: x[0])
 
                         has_more = False
-                        for page_num, elapsed, page_data, hn, err in resultados:
-                            logger.info(f"   pagina {page_num} (paralela): {len(page_data)} itens em {elapsed:.2f}s (hasNext={hn})")
-                            if err:
-                                erro_api = err
-                                break
-                            dados.extend(page_data)
-                            # Se a última página do lote ainda tem next, continua
-                            if page_num == lote_fim and hn:
-                                has_more = True
+                        for page_num, elapsed, page_data, hn, err_page in resultados:
+                            if err_page:
+                                paginas_com_erro += 1
+                                logger.warning(f"   ⚠️ pagina {page_num} (paralela): ERRO {err_page} em {elapsed:.2f}s")
+                                # Não interrompe — continua tentando outras
+                                if not erro_api:
+                                    erro_api = f"Falha parcial: {err_page}"
+                            else:
+                                logger.info(f"   pagina {page_num} (paralela): {len(page_data)} itens em {elapsed:.2f}s (hasNext={hn})")
+                                dados.extend(page_data)
+                                # Se a última página do lote ainda tem next, continua
+                                if page_num == lote_fim and hn:
+                                    has_more = True
                         lote_inicio = lote_fim + 1
                         # Proteção: para se passar de 40 páginas
                         if lote_inicio > 40:
                             logger.warning("⚠️ painel: parou em 40 paginas (limite de seguranca)")
+                            break
+                        # Se TODAS as 4 paginas falharam, para (provavelmente DB2 fora)
+                        if paginas_com_erro >= 4 and not dados:
+                            logger.warning("⚠️ painel: 4+ paginas falharam sem dados, abortando")
                             break
             except Exception as e:
                 erro_api = str(e)
@@ -3113,8 +3122,11 @@ def painel_view(request):
             t_total = _t.time() - t_start
             logger.info(f"✅ painel: {len(dados)} registros em {t_total:.2f}s (paralelo)")
 
-            if not erro_api and dados:
+            # Cacheia mesmo se houver erro parcial (desde que tenha dados)
+            if dados:
                 _painel_cache_set(cache_key, dados)
+                if erro_api:
+                    logger.info(f"   (cache salvo apesar de erro parcial: {erro_api})")
 
         # Decide o modo de agrupamento conforme filtros aplicados
         if not centro and not empresa:

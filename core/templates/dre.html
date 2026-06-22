@@ -170,10 +170,20 @@
         <div class="actions">
           <button type="submit" class="btn-coe primary">🔎 Pesquisar</button>
           <button type="button" class="btn-coe ghost {% if vista == 'totais' %}active{% endif %}" onclick="toggleVista()">📑 {% if vista == 'totais' %}Ver mês a mês{% else %}Ver só totais{% endif %}</button>
+          <button type="button" class="btn-coe ghost" onclick="exportarDREExcel()" {% if not consultou %}disabled{% endif %}>📤 Exportar Excel</button>
         </div>
       </div>
       <input type="hidden" name="vista" id="inputVista" value="{{ vista }}">
     </form>
+
+    <script>
+      function exportarDREExcel(){
+        const form = document.getElementById('dreForm');
+        const params = new URLSearchParams(new FormData(form));
+        params.set('pesquisar', '1');
+        window.location.href = "{% url 'exportar_dre_excel' %}?" + params.toString();
+      }
+    </script>
 
     <div class="hint">
       <span class="pill">Filtros</span>

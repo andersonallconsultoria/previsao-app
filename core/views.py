@@ -2784,6 +2784,264 @@ def dre_view(request):
     return render(request, 'dre.html', context)
 
 
+@token_required
+def exportar_dre_excel_view(request):
+    """Exporta o DRE atualmente filtrado para um arquivo .xlsx.
+
+    Reaproveita a mesma lógica de filtros e cache da dre_view; só troca o
+    render HTML por um download Excel formatado.
+    """
+    from datetime import date
+    from io import BytesIO
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+    from .dre_service import montar_dre, _meses_do_periodo
+    from .dre_config import get_estrutura_dre
+
+    username = request.session.get('username', '')
+    centros_permitidos_ids = get_centros_permitidos(username)
+    tem_lista_permitida = isinstance(centros_permitidos_ids, list) and len(centros_permitidos_ids) > 0
+
+    headers = get_api_headers()
+
+    hoje = datetime.now()
+    ano_atual = hoje.year
+    ano = int(request.GET.get('ano') or ano_atual)
+    empresa = request.GET.get('empresa') or ''
+    centro = request.GET.get('centro') or ''
+    dt_ini_str = request.GET.get('dt_ini') or f"{ano}-{hoje.month:02d}-01"
+    dt_fim_str = request.GET.get('dt_fim') or hoje.strftime("%Y-%m-%d")
+
+    # Permissão de centro
+    if centro and tem_lista_permitida:
+        try:
+            if int(centro) not in centros_permitidos_ids:
+                return HttpResponse("Você não tem permissão para acessar este centro de resultado.", status=403)
+        except ValueError:
+            centro = ''
+
+    try:
+        dt_ini = date.fromisoformat(dt_ini_str)
+    except ValueError:
+        dt_ini = date(ano, 1, 1)
+    try:
+        dt_fim = date.fromisoformat(dt_fim_str)
+    except ValueError:
+        dt_fim = date(ano, 12, 31)
+    if dt_ini > dt_fim:
+        dt_ini, dt_fim = dt_fim, dt_ini
+
+    meses = _meses_do_periodo(dt_ini, dt_fim)
+    mes_inicial = dt_ini.month
+    mes_final = dt_fim.month
+
+    DRE_ENDPOINT = get_dynamic_config('DRE_ENDPOINT', default='centro_resultado_bi_dre')
+
+    payload = {
+        "page": 1, "limit": 1000,
+        "clausulas": [
+            {"campo": "anoreferencia", "operadorlogico": "AND", "operador": "IGUAL", "valor": ano},
+            {"campo": "mesinicial",    "operadorlogico": "AND", "operador": "IGUAL", "valor": mes_inicial},
+            {"campo": "mesfinal",      "operadorlogico": "AND", "operador": "IGUAL", "valor": mes_final},
+            {"campo": "idempfiltro",   "operadorlogico": "AND", "operador": "IGUAL",
+             "valor": int(empresa) if empresa and str(empresa).strip().isdigit() else None},
+            {"campo": "idcentroresultadofiltro", "operadorlogico": "AND", "operador": "IGUAL",
+             "valor": int(centro) if centro and str(centro).strip().isdigit() else None},
+        ],
+    }
+
+    # Tenta usar o cache já populado pela dre_view
+    import time as _time
+    cache_key = f"{ano}|{empresa or 'X'}|{centro or 'X'}|{mes_inicial}|{mes_final}"
+    cache_entry = _dre_dados_cache.get(cache_key)
+    dados_brutos = []
+    if cache_entry and (_time.time() - cache_entry["ts"]) < _DRE_DADOS_TTL_SEG:
+        dados_brutos = cache_entry["dados"]
+        logger.info(f"📦 DRE export - cache HIT [{cache_key}] {len(dados_brutos)} registros")
+    else:
+        url = f"{get_dynamic_config('API_BASE_URL')}/cisspoder-service/{DRE_ENDPOINT}"
+        try:
+            page = 1
+            while True:
+                payload["page"] = page
+                resp = requests.post(url, json=payload, headers=headers, timeout=120)
+                if resp.status_code != 200:
+                    return HttpResponse(f"Erro ao consultar API: HTTP {resp.status_code}", status=502)
+                data = resp.json()
+                dados_brutos.extend(data.get("data", []))
+                if not data.get("hasNext", False):
+                    break
+                page += 1
+            _dre_dados_cache[cache_key] = {"dados": dados_brutos, "ts": _time.time()}
+        except Exception as e:
+            logger.exception("❌ DRE export - erro consulta")
+            return HttpResponse(f"Erro: {e}", status=500)
+
+    dre = montar_dre(dados_brutos, meses, estrutura=get_estrutura_dre())
+
+    # Resolve nomes para o cabeçalho
+    empresas_lst = _get_lista_cached('empresas', 'cadastro_empresa', headers)
+    centros_lst = _get_lista_cached('centros', 'cadastro_centroresultados', headers)
+    nome_empresa = "Todas"
+    if empresa:
+        for e in empresas_lst:
+            if str(e.get('idempresa')) == str(empresa):
+                nome_empresa = e.get('empresa') or empresa
+                break
+    nome_centro = "Todos"
+    if centro:
+        for c in centros_lst:
+            if str(c.get('idcentroresultado')) == str(centro):
+                nome_centro = c.get('centroresultados') or centro
+                break
+
+    # Monta o workbook
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "DRE"
+
+    # Estilos
+    titulo_font = Font(name='Calibri', size=14, bold=True, color='FFFFFF')
+    titulo_fill = PatternFill('solid', fgColor='004AAD')
+    header_font = Font(name='Calibri', size=11, bold=True, color='FFFFFF')
+    header_fill = PatternFill('solid', fgColor='2F343A')
+    section_font = Font(name='Calibri', size=11, bold=True, color='FFFFFF')
+    section_fill = PatternFill('solid', fgColor='1ABC9C')
+    subtotal_font = Font(name='Calibri', size=11, bold=True, color='1A355C')
+    subtotal_fill = PatternFill('solid', fgColor='FFF7E0')
+    total_font = Font(name='Calibri', size=12, bold=True, color='FFFFFF')
+    total_fill = PatternFill('solid', fgColor='FF7A00')
+    grupo_font = Font(name='Calibri', size=11)
+    border_thin = Border(left=Side(style='thin', color='D0D7DE'),
+                         right=Side(style='thin', color='D0D7DE'),
+                         top=Side(style='thin', color='D0D7DE'),
+                         bottom=Side(style='thin', color='D0D7DE'))
+    center = Alignment(horizontal='center', vertical='center')
+    right = Alignment(horizontal='right', vertical='center')
+    left = Alignment(horizontal='left', vertical='center', indent=1)
+
+    # Cabeçalho da planilha
+    nomes_meses_pt = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']
+    # Quantas colunas: 1 (descrição) + N meses × 3 (ant/prev/real) + 3 (total ant/prev/real)
+    n_cols = 1 + len(meses) * 3 + 3
+
+    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=n_cols)
+    c = ws.cell(row=1, column=1, value=f"DRE - {nome_empresa} / {nome_centro} — {ano}")
+    c.font = titulo_font
+    c.fill = titulo_fill
+    c.alignment = center
+    ws.row_dimensions[1].height = 26
+
+    ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=n_cols)
+    c = ws.cell(row=2, column=1, value=f"Período: {dt_ini.strftime('%d/%m/%Y')} a {dt_fim.strftime('%d/%m/%Y')}  •  Gerado em {hoje.strftime('%d/%m/%Y %H:%M')}")
+    c.font = Font(name='Calibri', size=10, italic=True, color='475569')
+    c.alignment = center
+
+    # Linha 3-4: Mês superior (mesclado em 3) + sub-headers ano-ant/previsto/realizado
+    ws.cell(row=3, column=1, value="Descrição").font = header_font
+    ws.cell(row=3, column=1).fill = header_fill
+    ws.cell(row=3, column=1).alignment = center
+    ws.cell(row=4, column=1, value="").fill = header_fill
+    ws.merge_cells(start_row=3, start_column=1, end_row=4, end_column=1)
+
+    for i, mes in enumerate(meses):
+        col_ini = 2 + i * 3
+        mes_label = nomes_meses_pt[int(mes) - 1] if mes.isdigit() and 1 <= int(mes) <= 12 else mes
+        ws.merge_cells(start_row=3, start_column=col_ini, end_row=3, end_column=col_ini + 2)
+        c = ws.cell(row=3, column=col_ini, value=f"{mes_label}/{ano}")
+        c.font = header_font; c.fill = header_fill; c.alignment = center
+        for j, sub in enumerate(["Ano anterior", "Previsto", "Realizado"]):
+            cc = ws.cell(row=4, column=col_ini + j, value=sub)
+            cc.font = header_font; cc.fill = header_fill; cc.alignment = center
+
+    # Coluna de totais (final)
+    col_total_ini = 2 + len(meses) * 3
+    ws.merge_cells(start_row=3, start_column=col_total_ini, end_row=3, end_column=col_total_ini + 2)
+    c = ws.cell(row=3, column=col_total_ini, value="TOTAL")
+    c.font = header_font; c.fill = header_fill; c.alignment = center
+    for j, sub in enumerate(["Ano anterior", "Previsto", "Realizado"]):
+        cc = ws.cell(row=4, column=col_total_ini + j, value=sub)
+        cc.font = header_font; cc.fill = header_fill; cc.alignment = center
+
+    # Linhas de dados
+    row = 5
+    for linha in dre['linhas']:
+        tipo = linha.get('tipo')
+        if tipo == 'section':
+            ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=n_cols)
+            cc = ws.cell(row=row, column=1, value=str(linha.get('label', '')).upper())
+            cc.font = section_font; cc.fill = section_fill; cc.alignment = left
+            row += 1
+            continue
+
+        # grupo / subtotal / total
+        is_total = bool(linha.get('total'))
+        is_sub = (tipo == 'subtotal' or linha.get('destacar'))
+
+        cc = ws.cell(row=row, column=1, value=linha.get('label', ''))
+        if is_total:
+            cc.font = total_font; cc.fill = total_fill
+        elif is_sub:
+            cc.font = subtotal_font; cc.fill = subtotal_fill
+        else:
+            cc.font = grupo_font
+        cc.alignment = left
+        cc.border = border_thin
+
+        valores = linha.get('valores') or {}
+        for i, mes in enumerate(meses):
+            v = valores.get(mes, {}) or {}
+            col_ini = 2 + i * 3
+            for j, k in enumerate(['ano_anterior', 'previsto', 'realizado']):
+                val = float(v.get(k) or 0)
+                celula = ws.cell(row=row, column=col_ini + j, value=val)
+                celula.number_format = '#,##0.00;[Red]-#,##0.00'
+                celula.alignment = right
+                celula.border = border_thin
+                if is_total:
+                    celula.font = total_font; celula.fill = total_fill
+                elif is_sub:
+                    celula.font = subtotal_font; celula.fill = subtotal_fill
+
+        # Totais
+        totais = linha.get('totais') or {}
+        for j, k in enumerate(['ano_anterior', 'previsto', 'realizado']):
+            val = float(totais.get(k) or 0)
+            celula = ws.cell(row=row, column=col_total_ini + j, value=val)
+            celula.number_format = '#,##0.00;[Red]-#,##0.00'
+            celula.alignment = right
+            celula.border = border_thin
+            celula.font = Font(name='Calibri', size=11, bold=True, color='FFFFFF' if is_total else ('1A355C' if is_sub else '0B1B2A'))
+            if is_total:
+                celula.fill = total_fill
+            elif is_sub:
+                celula.fill = subtotal_fill
+
+        row += 1
+
+    # Larguras
+    ws.column_dimensions['A'].width = 44
+    for i in range(2, n_cols + 1):
+        ws.column_dimensions[get_column_letter(i)].width = 15
+
+    # Freeze (descrição + headers)
+    ws.freeze_panes = 'B5'
+
+    # Resposta HTTP
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    filename = f"DRE_{ano}_{(empresa or 'Todas')}_{(centro or 'Todos')}_{dt_ini.strftime('%Y%m%d')}_{dt_fim.strftime('%Y%m%d')}.xlsx"
+    response = HttpResponse(
+        output.getvalue(),
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
+
+
 # ==================== LIBERAÇÃO DE EXCEDENTE ====================
 
 @token_required

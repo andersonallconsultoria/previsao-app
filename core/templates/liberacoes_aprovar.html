@@ -137,7 +137,8 @@
                 data-empresa="{{ s.idempresa }}"
                 data-centro="{{ s.idcentroresultado }}"
                 data-userso="{% firstof s.usersoSol "" %}"
-                data-aprovador="{% firstof s.usuarioAprovador "" %}">
+                data-aprovador="{% firstof s.usuarioAprovador "" %}"
+                {% if s.flagStatus != 'P' %}style="display:none;"{% endif %}>
               <td>{{ s.idsolicitacao }}</td>
               <td>
                 {% with st=s.flagStatus %}
@@ -296,6 +297,7 @@ function showToast(msg, ok){
 }
 
 function abrirModal(id, decisao, prev, real, lcto){
+  modalAberto = true;
   modalIdSolicitacao = id;
   modalDecisao = decisao;
   document.getElementById('modalTitulo').textContent =
@@ -322,6 +324,12 @@ function abrirModal(id, decisao, prev, real, lcto){
 
 function fecharModal(){
   document.getElementById('modalBg').style.display = 'none';
+  modalAberto = false;
+  if (refreshPendente){
+    refreshPendente = false;
+    // Atualiza com pequeno delay pra dar tempo do modal sumir visualmente
+    setTimeout(() => window.location.reload(), 300);
+  }
 }
 
 document.querySelectorAll('.tipo-opcao').forEach(opt => {
@@ -385,7 +393,18 @@ async function confirmar(){
   }
 }
 
+// Flag global - se o modal está aberto, pausamos o auto-refresh
+let modalAberto = false;
+let refreshPendente = false;
+
 function atualizar(){
+  if (modalAberto){
+    // Modal aberto: marca pra atualizar depois que o usuário fechar
+    refreshPendente = true;
+    const lu = document.getElementById('lastUpdate');
+    if (lu) lu.textContent = 'pausado (modal aberto)';
+    return;
+  }
   window.location.reload();
 }
 

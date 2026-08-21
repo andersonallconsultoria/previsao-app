@@ -1,0 +1,86 @@
+{% comment %}
+Partial: tbody da tabela de aprovar liberações.
+Reutilizada tanto no render inicial quanto no refresh AJAX (?ajax=1).
+Só precisa ter as tags <tbody>...</tbody> completas + o emptyMsg.
+{% endcomment %}
+{% load custom_filters %}
+<tbody id="tbodyHist" data-total-pendentes="{{ total_pendentes }}">
+  {% for s in pendentes %}
+  <tr data-id="{{ s.idsolicitacao }}"
+      data-status="{{ s.flagStatus }}"
+      data-empresa="{{ s.idempresa }}"
+      data-centro="{{ s.idcentroresultado }}"
+      data-userso="{% firstof s.usersoSol "" %}"
+      data-aprovador="{% firstof s.usuarioAprovador "" %}"
+      {% if s.flagStatus != 'P' %}style="display:none;"{% endif %}>
+    <td>{{ s.idsolicitacao }}</td>
+    <td>
+      {% with st=s.flagStatus %}
+        <span class="pill-status pill-status-{{ st }}">
+          {% if st == 'P' %}⏳ Pendente
+          {% elif st == 'A' %}✓ Aprovada
+          {% elif st == 'U' %}✅ Usada
+          {% elif st == 'R' %}✗ Recusada
+          {% else %}{{ st }}{% endif %}
+        </span>
+      {% endwith %}
+    </td>
+    <td><b>{% firstof s.usersoSol s.idusuarioSol "-" %}</b></td>
+    <td>
+      Emp: <b>{{ s.idempresa }}</b><br>
+      CR: <b>{{ s.idcentroresultado }}</b><br>
+      Cta: <b>{{ s.idctacontabil }}</b>
+    </td>
+    <td>{% if s.dtmovimento %}{{ s.dtmovimento|slice:"5:7" }}/{{ s.dtmovimento|slice:":4" }}{% else %}-{% endif %}</td>
+    <td class="num">
+      {% if s.valorExcedente %}
+        <b style="color:#dc2626;">{{ s.valorExcedente|floatformat:2 }}</b>
+      {% else %}<span style="color:#9ca3af">—</span>{% endif %}
+    </td>
+    <td class="num">{{ s.vallancamento|floatformat:2 }}</td>
+    <td><span class="pill-origem">{{ s.origem|default:"-" }}</span></td>
+    <td>
+      {% if s.tipoLiberacao %}
+        <div style="font-weight:700;">
+          {% if s.tipoLiberacao == 'U' %}🔒 One-shot
+          {% elif s.tipoLiberacao == 'V' %}💰 R$ {{ s.valorLibExtra|floatformat:2 }}
+          {% elif s.tipoLiberacao == 'P' %}📊 {{ s.percLibExtra|floatformat:1 }}%
+          {% else %}{{ s.tipoLiberacao }}{% endif %}
+        </div>
+        <small style="color:#64748b;">por {% firstof s.usuarioAprovador "—" %}<br>em {% firstof s.dtDecisao "—" %}</small>
+        {% if s.tipoLiberacao == 'V' and s.valorJaConsumido %}
+        <div style="margin-top:4px; font-size:11px; color:#0f6848;">Consumido: R$ {{ s.valorJaConsumido|floatformat:2 }}</div>
+        {% endif %}
+      {% else %}
+        <span style="color:#9ca3af; font-size:12px;">— aguardando —</span>
+      {% endif %}
+    </td>
+    <td style="max-width:280px;">
+      {% if s.justificativa %}
+        <div style="background:#fef9c3; border-left:3px solid #ca8a04; padding:6px 8px; border-radius:4px; font-size:12px; color:#713f12; margin-bottom:4px;">
+          <b style="font-size:10px; text-transform:uppercase; color:#92400e;">📝 Solicitante</b><br>
+          {{ s.justificativa }}
+        </div>
+      {% else %}
+        <div style="font-size:11px; color:#9ca3af; margin-bottom:4px;">📝 Sem justificativa</div>
+      {% endif %}
+      {% if s.observacao %}
+        <div style="background:#dbeafe; border-left:3px solid #1e40af; padding:6px 8px; border-radius:4px; font-size:12px; color:#1e3a8a;">
+          <b style="font-size:10px; text-transform:uppercase; color:#1e40af;">💬 Aprovador</b><br>
+          {{ s.observacao }}
+        </div>
+      {% elif s.flagStatus != 'P' %}
+        <div style="font-size:11px; color:#9ca3af;">💬 Sem observação</div>
+      {% endif %}
+    </td>
+    <td>
+      {% if s.flagStatus == 'P' %}
+        <button class="btn-aprovar" onclick='abrirModal({{ s.idsolicitacao }}, "A", {{ s.valorPrevisto|default:0 }}, {{ s.valorRealizado|default:0 }}, {{ s.vallancamento|default:0 }})'>✓ Aprovar</button>
+        <button class="btn-recusar" onclick='abrirModal({{ s.idsolicitacao }}, "R", {{ s.valorPrevisto|default:0 }}, {{ s.valorRealizado|default:0 }}, {{ s.vallancamento|default:0 }})'>✗ Recusar</button>
+      {% else %}
+        <span style="color:#9ca3af; font-size:11px;">{% if s.flagStatus == 'U' %}consumida{% elif s.flagStatus == 'A' %}aguardando consumo{% else %}—{% endif %}</span>
+      {% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+</tbody>

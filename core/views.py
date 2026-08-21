@@ -3060,14 +3060,20 @@ def liberacoes_aprovar_view(request):
 
     historico = liberacoes_service.listar_historico()
     total_pendentes = sum(1 for s in historico if s.get('flagStatus') == 'P')
-    return render(request, 'liberacoes_aprovar.html', {
-        'pendentes': historico,  # agora é o histórico completo (pendentes + decididas)
+
+    ctx = {
+        'pendentes': historico,  # histórico completo (pendentes + decididas)
         'total': len(historico),
         'total_pendentes': total_pendentes,
         'username': username,
         'pode_gerenciar_usuarios': usuario_pode_gerenciar_usuarios(username),
         'tem_acesso_configuracao': usuario_tem_acesso_configuracao(username),
-    })
+    }
+
+    # ?ajax=1: retorna só o partial do <tbody> pra atualização em background
+    if request.GET.get('ajax') == '1':
+        return render(request, '_liberacoes_aprovar_tbody.html', ctx)
+    return render(request, 'liberacoes_aprovar.html', ctx)
 
 
 @token_required

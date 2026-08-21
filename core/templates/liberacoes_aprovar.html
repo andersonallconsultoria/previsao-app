@@ -78,9 +78,14 @@
       <div class="card-title">
         <div>
           <h2>Solicitações <span class="badge-pendentes" id="badgeTotal">{{ total_pendentes }}</span></h2>
-          <small>Auto-refresh a cada 30 segundos. Última atualização: <span id="lastUpdate">agora</span>.</small>
+          <small>Última atualização: <span id="lastUpdate">agora</span>.</small>
         </div>
-        <div>
+        <div style="display:flex; gap:12px; align-items:center;">
+          <label id="lblAuto" title="Quando ligado, a lista se atualiza sozinha em segundo plano a cada 30s, sem recarregar a página nem interromper o que você está fazendo."
+                 style="display:flex; align-items:center; gap:6px; font-size:13px; color:#475569; font-weight:600; cursor:pointer; user-select:none;">
+            <input type="checkbox" id="chkAuto" style="width:15px; height:15px; cursor:pointer;">
+            Atualização automática
+          </label>
           <button class="btn-coe primary" onclick="atualizar()">🔄 Atualizar agora</button>
         </div>
       </div>
@@ -130,86 +135,7 @@
               <th>Ações</th>
             </tr>
           </thead>
-          <tbody id="tbodyHist">
-            {% for s in pendentes %}
-            <tr data-id="{{ s.idsolicitacao }}"
-                data-status="{{ s.flagStatus }}"
-                data-empresa="{{ s.idempresa }}"
-                data-centro="{{ s.idcentroresultado }}"
-                data-userso="{% firstof s.usersoSol "" %}"
-                data-aprovador="{% firstof s.usuarioAprovador "" %}"
-                {% if s.flagStatus != 'P' %}style="display:none;"{% endif %}>
-              <td>{{ s.idsolicitacao }}</td>
-              <td>
-                {% with st=s.flagStatus %}
-                  <span class="pill-status pill-status-{{ st }}">
-                    {% if st == 'P' %}⏳ Pendente
-                    {% elif st == 'A' %}✓ Aprovada
-                    {% elif st == 'U' %}✅ Usada
-                    {% elif st == 'R' %}✗ Recusada
-                    {% else %}{{ st }}{% endif %}
-                  </span>
-                {% endwith %}
-              </td>
-              <td><b>{% firstof s.usersoSol s.idusuarioSol "-" %}</b></td>
-              <td>
-                Emp: <b>{{ s.idempresa }}</b><br>
-                CR: <b>{{ s.idcentroresultado }}</b><br>
-                Cta: <b>{{ s.idctacontabil }}</b>
-              </td>
-              <td>{% if s.dtmovimento %}{{ s.dtmovimento|slice:"5:7" }}/{{ s.dtmovimento|slice:":4" }}{% else %}-{% endif %}</td>
-              <td class="num">
-                {% if s.valorExcedente %}
-                  <b style="color:#dc2626;">{{ s.valorExcedente|floatformat:2 }}</b>
-                {% else %}<span style="color:#9ca3af">—</span>{% endif %}
-              </td>
-              <td class="num">{{ s.vallancamento|floatformat:2 }}</td>
-              <td><span class="pill-origem">{{ s.origem|default:"-" }}</span></td>
-              <td>
-                {% if s.tipoLiberacao %}
-                  <div style="font-weight:700;">
-                    {% if s.tipoLiberacao == 'U' %}🔒 One-shot
-                    {% elif s.tipoLiberacao == 'V' %}💰 R$ {{ s.valorLibExtra|floatformat:2 }}
-                    {% elif s.tipoLiberacao == 'P' %}📊 {{ s.percLibExtra|floatformat:1 }}%
-                    {% else %}{{ s.tipoLiberacao }}{% endif %}
-                  </div>
-                  <small style="color:#64748b;">por {% firstof s.usuarioAprovador "—" %}<br>em {% firstof s.dtDecisao "—" %}</small>
-                  {% if s.tipoLiberacao == 'V' and s.valorJaConsumido %}
-                  <div style="margin-top:4px; font-size:11px; color:#0f6848;">Consumido: R$ {{ s.valorJaConsumido|floatformat:2 }}</div>
-                  {% endif %}
-                {% else %}
-                  <span style="color:#9ca3af; font-size:12px;">— aguardando —</span>
-                {% endif %}
-              </td>
-              <td style="max-width:280px;">
-                {% if s.justificativa %}
-                  <div style="background:#fef9c3; border-left:3px solid #ca8a04; padding:6px 8px; border-radius:4px; font-size:12px; color:#713f12; margin-bottom:4px;">
-                    <b style="font-size:10px; text-transform:uppercase; color:#92400e;">📝 Solicitante</b><br>
-                    {{ s.justificativa }}
-                  </div>
-                {% else %}
-                  <div style="font-size:11px; color:#9ca3af; margin-bottom:4px;">📝 Sem justificativa</div>
-                {% endif %}
-                {% if s.observacao %}
-                  <div style="background:#dbeafe; border-left:3px solid #1e40af; padding:6px 8px; border-radius:4px; font-size:12px; color:#1e3a8a;">
-                    <b style="font-size:10px; text-transform:uppercase; color:#1e40af;">💬 Aprovador</b><br>
-                    {{ s.observacao }}
-                  </div>
-                {% elif s.flagStatus != 'P' %}
-                  <div style="font-size:11px; color:#9ca3af;">💬 Sem observação</div>
-                {% endif %}
-              </td>
-              <td>
-                {% if s.flagStatus == 'P' %}
-                  <button class="btn-aprovar" onclick='abrirModal({{ s.idsolicitacao }}, "A", {{ s.valorPrevisto|default:0 }}, {{ s.valorRealizado|default:0 }}, {{ s.vallancamento|default:0 }})'>✓ Aprovar</button>
-                  <button class="btn-recusar" onclick='abrirModal({{ s.idsolicitacao }}, "R", {{ s.valorPrevisto|default:0 }}, {{ s.valorRealizado|default:0 }}, {{ s.vallancamento|default:0 }})'>✗ Recusar</button>
-                {% else %}
-                  <span style="color:#9ca3af; font-size:11px;">{% if s.flagStatus == 'U' %}consumida{% elif s.flagStatus == 'A' %}aguardando consumo{% else %}—{% endif %}</span>
-                {% endif %}
-              </td>
-            </tr>
-            {% endfor %}
-          </tbody>
+          {% include "_liberacoes_aprovar_tbody.html" %}
         </table>
         <div class="empty" id="emptyMsg" style="display:none;">
           <h3>📭 Nenhuma solicitação encontrada com esses filtros</h3>
@@ -327,8 +253,8 @@ function fecharModal(){
   modalAberto = false;
   if (refreshPendente){
     refreshPendente = false;
-    // Atualiza com pequeno delay pra dar tempo do modal sumir visualmente
-    setTimeout(() => window.location.reload(), 300);
+    // Atualiza em background (sem reload) após um pequeno delay
+    setTimeout(atualizar, 300);
   }
 }
 
@@ -397,15 +323,144 @@ async function confirmar(){
 let modalAberto = false;
 let refreshPendente = false;
 
-function atualizar(){
-  if (modalAberto){
-    // Modal aberto: marca pra atualizar depois que o usuário fechar
-    refreshPendente = true;
+// Reconciliação incremental do tbody: reaproveita as linhas que não mudaram
+// (identificadas por data-id) e só insere/remove/atualiza o necessário.
+// Assim nada "pisca" e o usuário não perde o que estava fazendo.
+function aplicarDiffTbody(novoTbody, antigoTbody){
+  // Assinatura ignora o atributo style (o display é controlado por aplicarFiltros),
+  // comparando só os dados que realmente mudam entre um refresh e outro.
+  function assinatura(tr){
+    return [tr.dataset.status, tr.dataset.empresa, tr.dataset.centro,
+            tr.dataset.userso, tr.dataset.aprovador].join('|') + '||' + tr.innerHTML;
+  }
+
+  const antigas = new Map();
+  antigoTbody.querySelectorAll(':scope > tr[data-id]').forEach(tr => antigas.set(tr.dataset.id, tr));
+
+  const novas = Array.from(novoTbody.querySelectorAll(':scope > tr[data-id]'));
+  const idsNovos = new Set(novas.map(tr => tr.dataset.id));
+
+  // 1) Remove as linhas que não existem mais no servidor
+  antigas.forEach((tr, id) => {
+    if (!idsNovos.has(id)){ tr.remove(); antigas.delete(id); }
+  });
+
+  // 2) Reconcilia em ordem, reaproveitando os nós inalterados
+  let ancora = null; // insere logo após este nó; null = topo do tbody
+  novas.forEach(nova => {
+    const id = nova.dataset.id;
+    let alvo = antigas.get(id);
+
+    if (!alvo){
+      // Linha nova: adota o nó vindo do servidor
+      alvo = nova.cloneNode(true);
+    } else if (assinatura(alvo) !== assinatura(nova)){
+      // Conteúdo mudou. Não recria se o usuário está com foco/seleção dentro dela
+      // (evita roubar o foco ou apagar uma seleção); atualiza no próximo ciclo.
+      const sel = window.getSelection();
+      const focoDentro = alvo.contains(document.activeElement);
+      const selDentro = sel && sel.rangeCount > 0 && alvo.contains(sel.anchorNode);
+      if (!focoDentro && !selDentro){
+        const novoNode = nova.cloneNode(true);
+        alvo.replaceWith(novoNode);
+        alvo = novoNode;
+      }
+    }
+    antigas.set(id, alvo);
+
+    // Garante a posição correta (logo após 'ancora')
+    const esperado = ancora ? ancora.nextElementSibling : antigoTbody.firstElementChild;
+    if (esperado !== alvo){
+      if (ancora) ancora.after(alvo);
+      else antigoTbody.prepend(alvo);
+    }
+    ancora = alvo;
+  });
+}
+
+// Guarda contra requisições sobrepostas: se a anterior ainda não voltou
+// (API lenta), o tick seguinte é descartado em vez de empilhar fetches.
+let atualizando = false;
+
+// Atualização FORÇADA: usada pelo botão "Atualizar agora" e após decidir.
+// Ignora as pausas do ciclo automático — aqui o usuário pediu explicitamente.
+async function atualizar(){
+  if (atualizando) return;
+  atualizando = true;
+  try {
+    // Fetch AJAX que atualiza APENAS o tbody, sem recarregar a página.
+    // Preserva filtros digitados, scroll position, foco em inputs, etc.
+    const resp = await fetch(window.location.pathname + '?ajax=1', {
+      headers: {'X-Requested-With': 'XMLHttpRequest'},
+      cache: 'no-store',
+    });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const html = await resp.text();
+
+    // Parse do HTML retornado e extração do novo <tbody>
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+    const novoTbody = doc.querySelector('#tbodyHist');
+    const antigoTbody = document.getElementById('tbodyHist');
+    if (novoTbody && antigoTbody){
+      // Atualização INCREMENTAL: reconcilia linha a linha em vez de recriar
+      // tudo. Linhas inalteradas ficam intactas (preserva seleção/scroll/hover)
+      // e nunca mexemos numa linha onde você está com foco ou texto selecionado.
+      aplicarDiffTbody(novoTbody, antigoTbody);
+      // Atualiza também o atributo data-total-pendentes pra sincronizar o badge
+      const novoTotal = novoTbody.getAttribute('data-total-pendentes');
+      if (novoTotal !== null){
+        antigoTbody.setAttribute('data-total-pendentes', novoTotal);
+        const badge = document.getElementById('badgeTotal');
+        if (badge) badge.textContent = novoTotal;
+      }
+    }
+
+    // Reaplica os filtros client-side pra manter o status/empresa/centro/busca
+    aplicarFiltros();
+
+    // Atualiza timestamp visual
+    marcarStatus(new Date().toLocaleTimeString('pt-BR') +
+                 (autoLigado ? ' — atualizando a cada 30s' : ''));
+  } catch(e){
+    console.warn('atualizar() falhou:', e);
     const lu = document.getElementById('lastUpdate');
-    if (lu) lu.textContent = 'pausado (modal aberto)';
+    if (lu) lu.textContent = 'erro ao atualizar';
+  } finally {
+    atualizando = false;
+  }
+}
+
+// Campos onde uma atualização no meio da digitação seria intrusiva.
+const CAMPOS_FILTRO = ['fStatus','fEmpresa','fCentro','fUsuario'];
+
+// Ciclo AUTOMÁTICO: só roda se estiver realmente seguro mexer na tela.
+function tickAuto(){
+  if (!autoLigado) return;
+
+  // Modal aberto: adia pro fechamento do modal
+  if (modalAberto){
+    refreshPendente = true;
+    marcarStatus('pausado (modal aberto)');
     return;
   }
-  window.location.reload();
+  // Aba em segundo plano: não gasta chamada de API à toa
+  if (document.hidden) return;
+  // Usuário digitando/escolhendo num filtro: não interrompe
+  if (CAMPOS_FILTRO.includes(document.activeElement?.id)) return;
+  // Usuário com texto selecionado na tabela (copiando/analisando): não interrompe
+  const sel = window.getSelection();
+  if (sel && !sel.isCollapsed && sel.rangeCount > 0){
+    const tb = document.getElementById('tbodyHist');
+    if (tb && tb.contains(sel.anchorNode)) return;
+  }
+
+  atualizar();
+}
+
+function marcarStatus(txt){
+  const lu = document.getElementById('lastUpdate');
+  if (lu) lu.textContent = txt;
 }
 
 // Filtros client-side
@@ -449,11 +504,33 @@ document.querySelectorAll('#fStatus, #fEmpresa, #fCentro, #fUsuario').forEach(el
 // Aplica filtro default (Pendentes)
 aplicarFiltros();
 
-// Auto-refresh a cada 30s
-setInterval(atualizar, 30000);
+// ---- Atualização automática (opt-in, preferência salva no navegador) ----
+// Desligada por padrão: a tela só muda quando VOCÊ pedir. Quando ligada,
+// atualiza só o <tbody> em segundo plano, sem recarregar a página.
+const AUTO_KEY = 'liberacoesAprovarAutoRefresh';
+let autoLigado = false;
+let autoTimer = null;
 
-// Mostra hora da última atualização
-document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString('pt-BR');
+function aplicarAuto(ligado){
+  autoLigado = ligado;
+  try { localStorage.setItem(AUTO_KEY, ligado ? '1' : '0'); } catch(e){}
+
+  if (autoTimer){ clearInterval(autoTimer); autoTimer = null; }
+  if (ligado){
+    autoTimer = setInterval(tickAuto, 30000);
+    marcarStatus(new Date().toLocaleTimeString('pt-BR') + ' — atualizando a cada 30s');
+  } else {
+    refreshPendente = false;
+    marcarStatus(new Date().toLocaleTimeString('pt-BR') + ' — atualização automática desligada');
+  }
+}
+
+const chkAuto = document.getElementById('chkAuto');
+let autoSalvo = false;
+try { autoSalvo = localStorage.getItem(AUTO_KEY) === '1'; } catch(e){}
+chkAuto.checked = autoSalvo;
+chkAuto.addEventListener('change', () => aplicarAuto(chkAuto.checked));
+aplicarAuto(autoSalvo);
 </script>
 </body>
 </html>
